@@ -334,11 +334,50 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
       return;
     }
 
-    // Simple host check: are you the host according to gameState?
-    const amHost = gameState.host === effectivePlayerId;
-    console.log('GameInterface: Host detection check:', {
+    // Enhanced host check: compare player ID with host ID and also check wallet addresses
+    let amHost = false;
+    
+    // Method 1: Direct player ID comparison
+    if (gameState.host === effectivePlayerId) {
+      amHost = true;
+    }
+    
+    // Method 2: Compare wallet addresses (for cases where player ID format differs)
+    if (!amHost && gameState.players) {
+      const currentPlayer = gameState.players.find((p: any) => p.id === effectivePlayerId);
+      const hostPlayer = gameState.players.find((p: any) => p.id === gameState.host);
+      
+      if (currentPlayer?.walletAddress && hostPlayer?.walletAddress) {
+        amHost = currentPlayer.walletAddress.toLowerCase() === hostPlayer.walletAddress.toLowerCase();
+      }
+    }
+    
+    // Method 3: Check if this is marked as creator in localStorage
+    if (!amHost) {
+      try {
+        const storedGameInfo = localStorage.getItem('currentGameInfo');
+        if (storedGameInfo) {
+          const gameInfo = JSON.parse(storedGameInfo);
+          if (gameInfo.isCreator === true && gameInfo.gameId === gameState.gameId) {
+            amHost = true;
+          }
+        }
+      } catch (error) {
+        console.error('Error checking localStorage for creator status:', error);
+      }
+    }
+    
+    console.log('GameInterface: Enhanced host detection check:', {
       gameStateHost: gameState.host,
       effectivePlayerId,
+      currentPlayerWallet: gameState.players?.find((p: any) => p.id === effectivePlayerId)?.walletAddress,
+      hostPlayerWallet: gameState.players?.find((p: any) => p.id === gameState.host)?.walletAddress,
+      isCreatorInStorage: (() => {
+        try {
+          const stored = localStorage.getItem('currentGameInfo');
+          return stored ? JSON.parse(stored).isCreator : false;
+        } catch { return false; }
+      })(),
       amHost,
       previousIsHost: isHost
     });
@@ -349,7 +388,7 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
     if (amHost !== isHost) {
       console.log('GameInterface: Host status changed from', isHost, 'to', amHost);
     }
-  }, [gameState?.host, effectivePlayerId]);
+  }, [gameState?.host, effectivePlayerId, gameState?.players]);
   
   // Get actionsByRound from game state - combine actionHistory with current round actions
   const actionsByRound = React.useMemo(() => {

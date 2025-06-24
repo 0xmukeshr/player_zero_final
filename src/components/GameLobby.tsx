@@ -3,6 +3,8 @@ import { useSocket } from '../context/SocketContext';
 import { useAudio } from '../hooks/useAudio';
 import { useGame } from '../dojo/hooks/useGame'; 
 import useAppStore from '../zustand/store';
+import { useAccount } from '@starknet-react/core';
+import { addAddressPadding } from 'starknet';
 
 interface PublicGame {
   id: string;
@@ -41,6 +43,7 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
 
   const {player,currentGame}=useAppStore();
   const {createGame} = useGame();
+  const { account } = useAccount();
   // Load user profile on mount
   useEffect(() => {
     const existingProfile = localStorage.getItem('userProfile');
@@ -98,6 +101,15 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
         }
       }
     });
+    
+    // Listen for the gameInfoReady event from SocketContext
+    const handleGameInfoReady = (event: CustomEvent) => {
+      console.log('GameLobby: gameInfoReady event received:', event.detail);
+      const { gameId, playerId, playerName } = event.detail;
+      setCreatedGameId(gameId);
+    };
+    
+    window.addEventListener('gameInfoReady', handleGameInfoReady as EventListener);
 
     socket.on('game-joined', (data: { gameId: string; playerId: string }) => {
       setLoading(false);
@@ -130,6 +142,7 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
       socket.off('game-created');
       socket.off('game-joined');
       socket.off('error');
+      window.removeEventListener('gameInfoReady', handleGameInfoReady as EventListener);
     };
   }, [socket, connected, onPlayGame]);
 
@@ -143,50 +156,177 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
     socket.emit('get-public-games');
   };
 
-  const handleCreateGame =async () => {
-       setLoading(true);
-      setError('');
+  const handleCreateGame = async () => {
+    setLoading(true);
+    setError('');
     console.log("🎮 Creating new game with max rounds:");
-    const response= await createGame(20);
-    if(response.success){
-      console.log("Gameid in client",currentGame?.id);
-      
- socket?.emit('create-game', {
-        gameName: gameName.trim(),
-        gameId:currentGame?.id,
-        playerName: player?.name,
-        isPrivate,
-        walletAddress: player?.address
-      });
+    
+    // Pre-validate required information before starting
+    console.log('Pre-validation check:', {
+      account: account ? account.address : 'null',
+      userProfile,
+      connected
+    });
+    
+    if (!account) {
+      setError('Wallet not connected. Please connect your wallet first.');
+      setLoading(false);
+      return;
     }
     
+    if (!userProfile?.name) {
+      // Try to reload userProfile from localStorage one more time
+      try {
+        const existingProfile = localStorage.getItem('userProfile');
+        if (existingProfile) {
+          const profile = JSON.parse(existingProfile);
+          setUserProfile(profile);
+          console.log('Reloaded userProfile from localStorage:', profile);
+          
+          if (!profile.name) {
+            setError('User profile loaded but name is missing. Please refresh the page and try again.');
+            setLoading(false);
+            return;
+          }
+        } else {
+          setError('User profile not found. Please refresh the page and try again.');
+          setLoading(false);
+          return;
+        }
+      } catch (error) {
+        setError('Error loading user profile. Please refresh the page and try again.');
+        setLoading(false);
+        return;
+      }
+    }
+    
+    try {
+      console.log('🔥 BEFORE createGame call - Store state:', useAppStore.getState().currentGame);
+      const response = await createGame(20);
+      console.log('🔥 AFTER createGame call - Store state:', useAppStore.getState().currentGame);
+      console.log('Game created transaction response:', response);
+        
+        if (response.success) {
+          console.log("Game created successfully. Transaction hash:", response.transactionHash);
+          
+          // Wait for the store to update with the correct game ID
+          let updatedGame = null;
+          let attempts = 0;
+          const maxAttempts = 20; // Wait up to 2 seconds
+          
+          while (!updatedGame?.id && attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            updatedGame = useAppStore.getState().currentGame;
+            attempts++;
+            console.log(`Attempt ${attempts}: Checking for updated game in store:`, updatedGame);
+          }
+          
+          if (!updatedGame?.id) {
+            console.error('Game ID not available after waiting. Current store state:', useAppStore.getState());
+            throw new Error('Game ID not available after transaction completion. Please try again.');
+          }
+          
+          console.log('Final updated game from store:', updatedGame);
+        console.log('Connected account:', account);
+        console.log('User profile:', userProfile);
+        
+        // Use wallet account and userProfile (get current userProfile in case it was reloaded)
+        const currentUserProfile = userProfile || JSON.parse(localStorage.getItem('userProfile') || '{}');
+        const playerAddress = addAddressPadding(account.address).toLowerCase();
+        const playerName = currentUserProfile.name;
+        
+        console.log('Player info to use:', { playerAddress, playerName });
+        
+        // Ensure we have game ID from the store
+        if (!updatedGame?.id) {
+          throw new Error(`Game ID not available in store after creation. Store game: ${JSON.stringify(updatedGame)}`);
+        }
+        
+        console.log("Emitting create-game event with:", {
+          gameName: gameName.trim(),
+          gameId: updatedGame.id,
+          playerName: playerName,
+          isPrivate,
+          walletAddress: playerAddress
+        });
+        
+        // Emit socket event for multiplayer coordination
+        socket?.emit('create-game', {
+          gameName: gameName.trim(),
+          gameId: updatedGame.id,
+          playerName: playerName,
+          isPrivate,
+          walletAddress: playerAddress
+        });
+        
+        // Set game info in socket context immediately - use wallet address as player ID
+        setGameInfo(updatedGame.id, playerAddress, playerName);
+        
+        // Store complete game info in localStorage
+        const gameInfo = {
+          gameId: updatedGame.id,
+          playerId: playerAddress, // Use starknet address as player ID
+          playerName: playerName, // Use random generated name
+          isCreator: true
+        };
+        
+        try {
+          localStorage.setItem('currentGameInfo', JSON.stringify(gameInfo));
+          console.log('Game info stored immediately after creation:', gameInfo);
+        } catch (error) {
+          console.error('Error storing game info:', error);
+        }
+        
+        // Auto-enter the waiting room
+        console.log('Auto-entering waiting room after successful game creation');
+        setLoading(false);
+        setShowCreateModal(false); // Close the modal
+        setGameName(''); // Reset form
+        setIsPrivate(false);
+        setError('');
+        
+        // Navigate to game interface directly
+        onPlayGame();
+        
+      } else {
+        throw new Error(response.error || 'Failed to create game');
+      }
+    } catch (error) {
+      console.error('Error creating game:', error);
+      setError(error instanceof Error ? error.message : 'Failed to create game');
+      setLoading(false);
+    }
   };
 
   const handleJoinPublicGame = (gameId: string, gameName?: string) => {
-    if (userProfile?.name && socket && connected) {
+    if (userProfile?.name && socket && connected && account) {
       setJoiningGameId(gameId);
       setError('');
       setJoinError('');
       
+      const playerAddress = addAddressPadding(account.address).toLowerCase();
+      
       socket.emit('join-game', {
         gameId,
         playerName: userProfile.name,
-        walletAddress: userProfile.wallet
+        walletAddress: playerAddress
       });
     }
   };
 
 
   const handleJoinById = () => {
-    if (joinGameId.trim() && userProfile?.name && socket && connected) {
+    if (joinGameId.trim() && userProfile?.name && socket && connected && account) {
       setLoading(true);
       setJoinError('');
       setError('');
       
+      const playerAddress = addAddressPadding(account.address).toLowerCase();
+      
       socket.emit('join-game', {
         gameId: joinGameId.trim(),
         playerName: userProfile.name,
-        walletAddress: userProfile.wallet
+        walletAddress: playerAddress
       });
     }
   };
@@ -269,13 +409,46 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
     
     setEnteringGame(true);
     
-    // Wait for game creation to complete and data to be available
+    // Use player info from zustand store first, then fallback to context/localStorage
     let effectivePlayerId = playerId;
-    let effectivePlayerName = userProfile?.name;
+    let effectivePlayerName = player?.name || userProfile?.name;
     let attempts = 0;
     const maxAttempts = 10;
     
-    // Poll for game info with timeout
+    // If we have player info from store, use it directly
+    if (player?.address && player?.name && createdGameId) {
+      console.log('Using player info from zustand store:', {
+        gameId: createdGameId,
+        playerId: player.address, // Use wallet address as player ID
+        playerName: player.name
+      });
+      
+      // Set the game info in context with store data
+      setGameInfo(createdGameId, player.address, player.name);
+      
+      // Store complete game info
+      const gameInfo = {
+        gameId: createdGameId,
+        playerId: player.address,
+        playerName: player.name,
+        isCreator: true
+      };
+      
+      try {
+        localStorage.setItem('currentGameInfo', JSON.stringify(gameInfo));
+        console.log('Complete game info stored in localStorage using store data:', gameInfo);
+      } catch (error) {
+        console.error('Error storing game info:', error);
+      }
+      
+      // Close modal and navigate
+      handleCloseCreateModal();
+      setEnteringGame(false);
+      onPlayGame();
+      return;
+    }
+    
+    // Poll for game info with timeout as fallback
     while (attempts < maxAttempts) {
       try {
         // First check context values
@@ -329,6 +502,7 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
         contextGameId: gameId,
         contextPlayerId: playerId,
         userProfileName: userProfile?.name,
+        playerFromStore: player,
         attempts
       });
       setError(`Missing game information after ${attempts} attempts. Player ID: ${effectivePlayerId || 'missing'}, Player Name: ${effectivePlayerName || 'missing'}`);

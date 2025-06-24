@@ -30,7 +30,10 @@ const inactivityTimers = new Map(); // gameId -> inactivity timer
 
 // Helper function to generate game ID
 function generateGameId() {
-  return Math.random().toString(36).substr(2, 9).toUpperCase();
+  // Create a more unique game ID using timestamp and random string
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substr(2, 6);
+  return `${timestamp}${random}`.toUpperCase();
 }
 
 // Helper function to generate player ID
@@ -103,15 +106,16 @@ io.on('connection', (socket) => {
     try {
       const { gameName,gameId, playerName, isPrivate, walletAddress } = data;
       
-      const playerId = generatePlayerId();
+      // Use wallet address as playerId for consistent host detection
+      const playerId = walletAddress || generatePlayerId();
       
-      console.log(`🎮 Creating game with host wallet: ${walletAddress}`);
+      console.log(`🎮 Creating game with host wallet: ${walletAddress}, playerId: ${playerId}`);
       
       const gameState = createInitialGameState();
       const player = createPlayer(playerId, playerName, socket.id, walletAddress);
       
       gameState.players.push(player);
-      gameState.host = playerId;
+      gameState.host = playerId; // This will now be the wallet address
       gameState.gameName = gameName;
       gameState.isPrivate = isPrivate || false;
       gameState.createdAt = new Date();
@@ -204,7 +208,8 @@ io.on('connection', (socket) => {
         return;
       }
       
-      const playerId = generatePlayerId();
+      // Use wallet address as playerId for consistent player identification
+      const playerId = walletAddress || generatePlayerId();
       const player = createPlayer(playerId, playerName, socket.id, walletAddress);
       
       game.players.push(player);
@@ -672,9 +677,17 @@ setInterval(async () => {
 }, 60 * 60 * 1000); // Every hour
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', async () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Access from other devices: http://YOUR_IP_ADDRESS:${PORT}`);
   console.log('Supabase database integration enabled');
+  
+  // Cleanup old test games on startup
+  try {
+    await GameDatabase.cleanupOldGames(0.1); // Remove games older than 6 minutes for testing
+    console.log('Cleaned up old test games on startup');
+  } catch (error) {
+    console.error('Error cleaning up old games on startup:', error);
+  }
 });
 

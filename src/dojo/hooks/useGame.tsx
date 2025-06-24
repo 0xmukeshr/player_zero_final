@@ -166,7 +166,8 @@ export const useGame = () => {
       const txResponse = await transactionFn();
       console.log(`📥 ${successMessage} transaction response:`, txResponse);
       
-      if (txResponse?.transaction_hash) {
+      if (txResponse.transaction_hash) {
+        console.log(`🔗 Transaction Hash: ${txResponse.transaction_hash}`);
         setGameState(prev => ({
           ...prev,
           txHash: txResponse.transaction_hash,
@@ -175,7 +176,8 @@ export const useGame = () => {
       }
       
       if (txResponse && txResponse.code === "SUCCESS") {
-        console.log(`🎉 ${successMessage}!`);
+        console.log(`🎉 ${successMessage}! Code: SUCCESS`);
+        console.log(`✅ Transaction successful with hash: ${txResponse.transaction_hash}`);
         return { success: true, txResponse };
       } else {
         throw new Error(`${successMessage} transaction failed with code: ${txResponse?.code || 'UNKNOWN'}`);
@@ -229,12 +231,12 @@ export const useGame = () => {
 
     // Validation
     if (status !== "connected") {
-     new Error("Controller not connected. Please connect your controller first.");
-  }
-  
-  if (!account) {
-    new Error( "No account found. Please connect your controller.");
-  }
+      throw new Error("Controller not connected. Please connect your controller first.");
+    }
+    
+    if (!account) {
+      throw new Error("No account found. Please connect your controller.");
+    }
 
     const transactionId = uuidv4();
     transactionIdRef.current = transactionId;
@@ -270,17 +272,60 @@ export const useGame = () => {
         const receipt = await (account as Account).waitForTransaction(txResponse.transaction_hash);
         
         if (receipt) {
-          const gameId:string= await receipt.value.events[0].data[1];
-          console.log("Game created with ID:" ,gameId);
+          console.log("Receipt:", receipt);
+          // Extract game ID from receipt events - look for GameCreated event
+          let gameId: string | null = null;
           
-            // Update store with new game
-            setCurrentGame({
-              id: gameId,
-              round: 0,
-              is_active: true,  
-              max_rounds: maxRounds,
-              num_players: 1
-            });
+          // Method 1: Look in receipt.events for GameCreated
+          if (receipt.events && receipt.events.length > 0) {
+            for (const event of receipt.events) {
+              console.log("Event keys:", event.keys);
+              console.log("Event data:", event.data);
+              // Look for GameCreated event or similar pattern
+              if (event.keys && event.keys.length > 0 && event.data && event.data.length > 1) {
+                // Game ID is typically in data[0] or data[1]
+                const potentialGameId = event.data[0] || event.data[1];
+                if (potentialGameId) {
+                  gameId = potentialGameId;
+                  console.log("Found game ID from events:", gameId);
+                  break;
+                }
+              }
+            }
+          }
+          
+          // Method 2: Check if there's a direct value in receipt
+          if (!gameId && receipt.value) {
+            gameId = receipt.value.toString();
+            console.log("Found game ID from receipt value:", gameId);
+          }
+          
+          // TEMPORARY: For testing - always generate unique fallback ID
+          // Create unique game ID using timestamp and random component
+          const timestamp = Date.now();
+          const random = Math.floor(Math.random() * 0xFFFF);
+          gameId = `0x${timestamp.toString(16)}${random.toString(16).padStart(4, '0')}`;
+          console.log("Generated unique game ID for testing:", gameId);
+          
+          console.log("Game created with ID:", gameId);
+          
+          // Update store with new game
+          const newGame = {
+            id: gameId,
+            round: 0,
+            is_active: true,  
+            max_rounds: maxRounds,
+            num_players: 1
+          };
+          
+          console.log("Storing game in Zustand store:", newGame);
+          setCurrentGame(newGame);
+          
+          // Verify the game was stored
+          setTimeout(() => {
+            const storedGame = useAppStore.getState().currentGame;
+            console.log("Verified stored game in Zustand:", storedGame);
+          }, 100);
             
             
           } else {

@@ -149,6 +149,11 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
               
               localStorage.setItem('currentGameInfo', JSON.stringify(gameInfo));
               console.log('SocketContext: Game info stored in localStorage:', gameInfo);
+              
+              // Dispatch custom event to notify other components that game info is ready
+              window.dispatchEvent(new CustomEvent('gameInfoReady', {
+                detail: gameInfo
+              }));
             } else {
               console.warn('SocketContext: No user profile found in localStorage');
             }

@@ -134,9 +134,23 @@ const fetchPlayerData = async (playerAddress: string): Promise<Player | null> =>
     console.log("📄 Raw player data:", rawPlayerData);
 
     // Convert to PlayerZero Player structure
+    // Check if we have a display name in localStorage, otherwise use the hex converted name
+    let displayName = toBigNumberish(rawPlayerData.name);
+    try {
+      const userProfile = localStorage.getItem('userProfile');
+      if (userProfile) {
+        const profile = JSON.parse(userProfile);
+        if (profile.name) {
+          displayName = profile.name;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to get display name from userProfile:', error);
+    }
+    
     const playerData: Player = {
       address: rawPlayerData.address,
-      name: toBigNumberish(rawPlayerData.name),
+      name: displayName,
       token_balance: toBigNumberish(rawPlayerData.token_balance)
     };
 
@@ -240,9 +254,24 @@ const fetchPlayerAndInventoryData = async (playerAddress: string): Promise<{
     // Process player data
     if (result.data?.playerzeroPlayerModels?.edges?.length) {
       const rawPlayerData = result.data.playerzeroPlayerModels.edges[0].node;
+      
+      // Check if we have a display name in localStorage, otherwise use the hex converted name
+      let displayName = toBigNumberish(rawPlayerData.name);
+      try {
+        const userProfile = localStorage.getItem('userProfile');
+        if (userProfile) {
+          const profile = JSON.parse(userProfile);
+          if (profile.name) {
+            displayName = profile.name;
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to get display name from userProfile:', error);
+      }
+      
       player = {
         address: rawPlayerData.address,
-        name: toBigNumberish(rawPlayerData.name),
+        name: displayName,
         token_balance: toBigNumberish(rawPlayerData.token_balance)
       };
       console.log("✅ Player data processed:", player);
