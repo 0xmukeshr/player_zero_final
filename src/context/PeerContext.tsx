@@ -66,8 +66,8 @@ function createPlayer(playerId: string, playerName: string) {
     id: playerId,
     name: playerName,
     tokens: 1000,
-    assets: { gold: 50, water: 25, oil: 10 },
-    totalAssets: 85,
+    assets: { gold: 0, water: 0, oil: 0 },
+    totalAssets: 0,
     connected: true
   };
 }

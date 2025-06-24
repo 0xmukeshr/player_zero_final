@@ -863,7 +863,7 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
               type="text"
               value={joinGameId}
               onChange={(e) => {
-                setJoinGameId(e.target.value.toUpperCase());
+                setJoinGameId(e.target.value.trim());
                 if (joinError) setJoinError(''); // Reset error when typing
               }}
               placeholder="Enter Game ID"
@@ -872,7 +872,7 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
                   ? 'bg-pixel-dark-gray text-pixel-error border-pixel-error focus:border-pixel-error'
                   : 'bg-pixel-dark-gray text-pixel-base-gray border-pixel-gray focus:border-pixel-primary'
               }`}
-              maxLength={9}
+              maxLength={11}
             />
             
             <div className="flex space-x-4">

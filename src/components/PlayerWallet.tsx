@@ -1,5 +1,7 @@
 import React from 'react';
 import { DollarSign, Circle } from 'lucide-react';
+import useAppStore from '../zustand/store';
+import { BigNumberUtils } from '../zustand/store';
 
 interface PlayerWalletProps {
   tokens: number;

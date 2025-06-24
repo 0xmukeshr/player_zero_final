@@ -1,17 +1,32 @@
 import React, { useState } from 'react';
-import { Player, Action } from '../types/game';
 import { Circle, TrendingUp, TrendingDown, Zap, Target } from 'lucide-react';
 import { useAudio } from '../hooks/useAudio';
+import { AssetType, ActionType } from '../zustand/store';
+import useAppStore from '../zustand/store';
+import { useMarket } from '../dojo/hooks/fetchMarket';
+
+// Local interfaces for socket-based game data
+interface Player {
+  id: string;
+  name: string;
+  tokens: number;
+  assets: {
+    gold: number;
+    water: number;
+    oil: number;
+  };
+  totalAssets: number;
+}
 
 interface ActionPanelProps {
-  selectedAction: Action['type'];
-  selectedResource: 'gold' | 'water' | 'oil';
+  selectedAction: ActionType;
+  selectedResource: AssetType;
   amount: number;
   targetPlayer: string;
   players: Player[];
   currentPlayer: Player;
-  onActionChange: (action: Action['type']) => void;
-  onResourceChange: (resource: 'gold' | 'water' | 'oil') => void;
+  onActionChange: (action: ActionType) => void;
+  onResourceChange: (resource: AssetType) => void;
   onAmountChange: (amount: number) => void;
   onTargetChange: (target: string) => void;
   onConfirmAction: () => void;
@@ -34,41 +49,47 @@ export function ActionPanel({
   const [quickPreset, setQuickPreset] = useState<number | null>(null);
   const { playSound } = useAudio();
   
-  const actions: { type: Action['type']; label: string; color: string; borderColor: string; icon: any; description: string }[] = [
-    { type: 'buy', label: 'Buy', color: 'bg-pixel-success hover:bg-pixel-primary', borderColor: 'border-pixel-success', icon: TrendingUp, description: 'Purchase resources with tokens' },
-    { type: 'sell', label: 'Sell', color: 'bg-pixel-blue hover:bg-pixel-cyan', borderColor: 'border-pixel-blue', icon: TrendingDown, description: 'Convert resources to tokens' },
-    { type: 'burn', label: 'Burn', color: 'bg-pixel-secondary hover:bg-pixel-warning', borderColor: 'border-pixel-secondary', icon: Zap, description: 'Destroy resources to boost market' },
-    { type: 'sabotage', label: 'Sabotage', color: 'bg-pixel-error hover:bg-pixel-warning', borderColor: 'border-pixel-error', icon: Target, description: 'Attack opponent resources' }
+  const actions: { type: ActionType; label: string; color: string; borderColor: string; icon: any; description: string }[] = [
+    { type: 'Buy', label: 'Buy', color: 'bg-pixel-success hover:bg-pixel-primary', borderColor: 'border-pixel-success', icon: TrendingUp, description: 'Purchase resources with tokens' },
+    { type: 'Sell', label: 'Sell', color: 'bg-pixel-blue hover:bg-pixel-cyan', borderColor: 'border-pixel-blue', icon: TrendingDown, description: 'Convert resources to tokens' },
+    { type: 'Burn', label: 'Burn', color: 'bg-pixel-secondary hover:bg-pixel-warning', borderColor: 'border-pixel-secondary', icon: Zap, description: 'Destroy resources to boost market' },
+    { type: 'Sabotage', label: 'Sabotage', color: 'bg-pixel-error hover:bg-pixel-warning', borderColor: 'border-pixel-error', icon: Target, description: 'Attack opponent resources' }
   ];
 
-  const resources: { type: 'gold' | 'water' | 'oil'; label: string; price: number; icon: string; color: string; bgColor: string }[] = [
-    { type: 'gold', label: 'Gold', price: 10, icon: '🪙', color: 'text-pixel-yellow', bgColor: 'bg-pixel-yellow' },
-    { type: 'water', label: 'Water', price: 15, icon: '💧', color: 'text-pixel-blue', bgColor: 'bg-pixel-blue' },
-    { type: 'oil', label: 'Oil', price: 25, icon: '🛢️', color: 'text-pixel-magenta', bgColor: 'bg-pixel-magenta' }
+  const resources: { type: AssetType; label: string; price: number; icon: string; color: string; bgColor: string }[] = [
+    { type: 'Gold', label: 'Gold', price: 10, icon: '🪙', color: 'text-pixel-yellow', bgColor: 'bg-pixel-yellow' },
+    { type: 'Water', label: 'Water', price: 15, icon: '💧', color: 'text-pixel-blue', bgColor: 'bg-pixel-blue' },
+    { type: 'Oil', label: 'Oil', price: 25, icon: '🛢️', color: 'text-pixel-magenta', bgColor: 'bg-pixel-magenta' }
   ];
 
   const quickAmounts = [1, 5, 10, 25, 50];
 
-  const getResourcePrice = (resource: 'gold' | 'water' | 'oil') => {
+  const getResourcePrice = (resource: AssetType) => {
     const resourceData = resources.find(r => r.type === resource);
     return resourceData ? resourceData.price : 0;
   };
 
+  // Helper to convert AssetType to lowercase for asset access
+  const getAssetKey = (assetType: AssetType): 'gold' | 'water' | 'oil' => {
+    return assetType.toLowerCase() as 'gold' | 'water' | 'oil';
+  };
+
   const calculateCost = () => {
     const price = getResourcePrice(selectedResource) * amount;
-    return selectedAction === 'sell' ? Math.floor(price * 0.8) : price;
+    return selectedAction === 'Sell' ? Math.floor(price * 0.8) : price;
   };
 
   const getMaxAmount = () => {
+    const assetKey = getAssetKey(selectedResource);
     switch (selectedAction) {
-      case 'buy':
+      case 'Buy':
         return Math.floor(currentPlayer.tokens / getResourcePrice(selectedResource));
-      case 'sell':
-      case 'burn':
-        return currentPlayer.assets[selectedResource];
-      case 'sabotage':
+      case 'Sell':
+      case 'Burn':
+        return currentPlayer.assets[assetKey];
+      case 'Sabotage':
         const target = players.find(p => p.name === targetPlayer);
-        return target ? target.assets[selectedResource] : 0;
+        return target ? target.assets[assetKey] : 0;
       default:
         return 0;
     }
@@ -76,15 +97,16 @@ export function ActionPanel({
 
   const canPerformAction = () => {
     const cost = calculateCost();
+    const assetKey = getAssetKey(selectedResource);
 
     switch (selectedAction) {
-      case 'buy':
+      case 'Buy':
         return currentPlayer.tokens >= cost && amount > 0;
-      case 'sell':
-        return currentPlayer.assets[selectedResource] >= amount && amount > 0;
-      case 'burn':
-        return currentPlayer.assets[selectedResource] >= amount && amount > 0;
-      case 'sabotage':
+      case 'Sell':
+        return currentPlayer.assets[assetKey] >= amount && amount > 0;
+      case 'Burn':
+        return currentPlayer.assets[assetKey] >= amount && amount > 0;
+      case 'Sabotage':
         return currentPlayer.tokens >= 100 && targetPlayer && amount > 0;
       default:
         return false;
@@ -196,7 +218,7 @@ export function ActionPanel({
           <div className="flex justify-between items-center text-pixel-xs">
             <span className="text-pixel-primary font-bold">You have:</span>
             <span className={`font-bold ${resources.find(r => r.type === selectedResource)?.color}`}>
-              {currentPlayer.assets[selectedResource]} {selectedResource}
+              {currentPlayer.assets[getAssetKey(selectedResource)]} {selectedResource}
             </span>
           </div>
           <div className="flex justify-between items-center text-pixel-xs mt-1">
@@ -388,10 +410,10 @@ export function ActionPanel({
         {/* Error Messages */}
         {!canPerformAction() && (
           <div className="text-pixel-xs text-pixel-error font-bold text-center uppercase">
-            {selectedAction === 'buy' && currentPlayer.tokens < calculateCost() && 'Insufficient tokens'}
-            {(selectedAction === 'sell' || selectedAction === 'burn') && currentPlayer.assets[selectedResource] < amount && 'Insufficient resources'}
-            {selectedAction === 'sabotage' && !targetPlayer && 'Select a target'}
-            {selectedAction === 'sabotage' && currentPlayer.tokens < 100 && 'Need 100 tokens'}
+            {selectedAction === 'Buy' && currentPlayer.tokens < calculateCost() && 'Insufficient tokens'}
+            {(selectedAction === 'Sell' || selectedAction === 'Burn') && currentPlayer.assets[getAssetKey(selectedResource)] < amount && 'Insufficient resources'}
+            {selectedAction === 'Sabotage' && !targetPlayer && 'Select a target'}
+            {selectedAction === 'Sabotage' && currentPlayer.tokens < 100 && 'Need 100 tokens'}
             {amount <= 0 && 'Invalid amount'}
           </div>
         )}

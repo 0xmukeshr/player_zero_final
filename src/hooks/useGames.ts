@@ -1,5 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Game } from '../types/game';
+import { AssetType, ActionType } from '../zustand/store';
+
+// Local interface for client-side game list (different from Dojo Game model)
+interface Game {
+  id: string;
+  name: string;
+  status: 'Open' | 'In Progress' | 'Finished';
+  currentPlayers: number;
+  maxPlayers: number;
+  createdAt: Date;
+  currentRound: number;
+  maxRounds: number;
+  isPrivate: boolean;
+  hostName: string;
+}
 
 export function useGames() {
   const [games, setGames] = useState<Game[]>([]);

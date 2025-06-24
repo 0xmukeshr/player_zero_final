@@ -83,7 +83,7 @@ async function testDatabaseOperations() {
         id: 'player_test',
         name: 'TestPlayer',
         tokens: 1000,
-        assets: { gold: 50, water: 25, oil: 10 }
+        assets: { gold: 0, water: 0, oil: 0 }
       }
     ],
     game_state: {

@@ -1,6 +1,22 @@
 import React from 'react';
-import { Player } from '../types/game';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { AssetType } from '../zustand/store';
+import useAppStore from '../zustand/store';
+import { useMarket } from '../dojo/hooks/fetchMarket';
+
+// Local interface for socket-based player data
+interface Player {
+  id: string;
+  name: string;
+  tokens: number;
+  assets: {
+    gold: number;
+    water: number;
+    oil: number;
+  };
+  totalAssets: number;
+  finalScore?: number;
+}
 
 interface PlayerStatsProps {
   players: Player[];

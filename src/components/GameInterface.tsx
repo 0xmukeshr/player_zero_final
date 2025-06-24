@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GameState, Action, Player } from '../types/game';
 import { Timer } from './Timer';
 import { PlayerWallet } from './PlayerWallet';
 import { AssetsList } from './AssetsList';
@@ -8,6 +7,18 @@ import { ActionPanel } from './ActionPanel';
 import { RecentActions } from './RecentActions';
 import { useSocket } from '../context/SocketContext';
 import { useAudio } from '../hooks/useAudio';
+
+// Import types and store from store.ts (which re-exports bindings)
+import useAppStore, { 
+  AssetType, 
+  ActionType, 
+  BigNumberUtils,
+  type Player,
+  type Game, 
+  type Inventory, 
+  type Market, 
+  type Action 
+} from '../zustand/store';
 
 // Dojo hooks
 import { useBuyAsset } from '../dojo/hooks/useBuyAsset';
@@ -18,7 +29,6 @@ import { useNextRound } from '../dojo/hooks/useNextRound';
 import { usePlayer } from '../dojo/hooks/usePlayer';
 import { useGame } from '../dojo/hooks/useGame';
 import { useMarket } from '../dojo/hooks/fetchMarket';
-import { AssetType } from '../zustand/store';
 
 interface GameInterfaceProps {
   onExitGame: () => void;
@@ -86,16 +96,43 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
     setContextLoaded(true);
   }, [gameId, playerId, playerName]);
   const { playSound } = useAudio();
-  const [gameState, setGameState] = useState<GameState>(null);
+  
+  // Use Zustand store for application state
+  const {
+    currentGame,
+    market,
+    player: dojoPlayerFromStore,
+    inventory,
+    gameStarted,
+    selectedAsset,
+    selectedAction: selectedActionFromStore,
+    isLoading,
+    error,
+    setCurrentGame,
+    setPlayer,
+    setInventory,
+    setMarket,
+    setSelectedAsset,
+    setSelectedAction,
+    startGame: storeStartGame,
+    endGame: storeEndGame,
+    setLoading,
+    setError,
+    getAssetPrice,
+    getAssetAmount,
+    canAffordAsset,
+    getTotalPortfolioValue
+  } = useAppStore();
+  
+  // Local UI state that doesn't need to persist
+  const [gameState, setGameState] = useState<any>(null); // Keep for socket-based game state
   const [isHost, setIsHost] = useState(false);
-  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
-  const [selectedAction, setSelectedAction] = useState<Action['type']>('buy');
-  const [selectedResource, setSelectedResource] = useState<'gold' | 'water' | 'oil'>('gold');
+  const [currentPlayer, setCurrentPlayer] = useState<any>(null); // Socket player data
+  const [selectedAction, setSelectedActionLocal] = useState<ActionType>('Buy');
+  const [selectedResource, setSelectedResource] = useState<AssetType>('Gold');
   const [amount, setAmount] = useState<number>(1);
   const [targetPlayer, setTargetPlayer] = useState<string>('');
-  const [gameStarted, setGameStarted] = useState(false);
   const [notifications, setNotifications] = useState<string[]>([]);
-  // Use actionHistory from game state instead of local state
   const [previousPlayerCount, setPreviousPlayerCount] = useState(0);
   const [previousRecentActions, setPreviousRecentActions] = useState<string[]>([]);
   const [showWinnerModal, setShowWinnerModal] = useState(false);
@@ -312,17 +349,37 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
     if (gameState) {
       const player = gameState.players.find((p: any) => p.id === effectivePlayerId);
       setCurrentPlayer(player || null);
-      setGameStarted(gameState.status === 'playing');
       
-      // Debug logs for Start Game button
+      // Fix: Only consider game started when status is 'playing'
+      // currentRound can be > 0 even in waiting room (for game setup)
+      const shouldBeStarted = gameState.status === 'playing';
+      
+      // Debug first to see what's happening
       console.log('GameInterface: Game state updated:', {
         playerCount: gameState.players.length,
         isHost: gameState.host === effectivePlayerId,
         status: gameState.status,
-        gameStarted: gameState.status === 'playing'
+        currentRound: gameState.currentRound,
+        shouldBeStarted,
+        currentGameStarted: gameStarted,
+        willCallStartGame: shouldBeStarted && !gameStarted,
+        willCallEndGame: !shouldBeStarted && gameStarted
       });
+      
+      // CRITICAL FIX: Always call storeStartGame if game should be started, regardless of current state
+      if (shouldBeStarted) {
+        console.log('GameInterface: Game should be started, calling storeStartGame()');
+        storeStartGame();
+        
+        // Check store immediately to confirm update
+        const newGameStarted = useAppStore.getState().gameStarted;
+        console.log('GameInterface: Store gameStarted immediately after storeStartGame():', newGameStarted);
+      } else if (!shouldBeStarted && gameStarted) {
+        console.log('GameInterface: Game should NOT be started, calling storeEndGame()');
+        storeEndGame();
+      }
     }
-  }, [gameState, effectivePlayerId]);
+  }, [gameState?.status, gameState?.currentRound, effectivePlayerId]); // Removed gameStarted from dependencies to prevent loops
   
   // Clean host detection - simple and reliable
   useEffect(() => {
@@ -473,6 +530,10 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
     onExitGame();
   };
 
+  const handlePlayerAction = async () => {
+    await handleAction();
+  };
+
   const handleAction = async () => {
     if (!currentPlayer || amount <= 0) return;
 
@@ -483,14 +544,14 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
       targetPlayer: selectedAction === 'sabotage' ? targetPlayer : undefined
     };
 
-    // Convert resource to AssetType for Dojo hooks
-    const assetType: AssetType = selectedResource === 'gold' ? 'Gold' : 
-                                selectedResource === 'water' ? 'Water' : 'Oil';
+    // Use the store-managed selected resource and action
+    const assetType: AssetType = selectedResource;
+    const actionType: ActionType = selectedAction;
 
     try {
       // Execute Dojo action based on selected action type
-      switch (selectedAction) {
-        case 'buy':
+      switch (actionType) {
+        case 'Buy':
           if (canBuyAsset) {
             console.log(`🎮 Executing Dojo buy ${assetType}`);
             await executeBuyAsset(assetType);
@@ -500,7 +561,7 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
           }
           break;
         
-        case 'sell':
+        case 'Sell':
           if (canSellAsset) {
             console.log(`🎮 Executing Dojo sell ${assetType}`);
             await executeSellAsset(assetType);
@@ -510,7 +571,7 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
           }
           break;
         
-        case 'burn':
+        case 'Burn':
           if (canBurnAsset) {
             console.log(`🎮 Executing Dojo burn ${assetType}`);
             await executeBurnAsset(assetType);
@@ -520,7 +581,7 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
           }
           break;
         
-        case 'sabotage':
+        case 'Sabotage':
           if (canSabotage && targetPlayer) {
             console.log(`🎮 Executing Dojo sabotage ${assetType} on ${targetPlayer}`);
             // Note: The Dojo sabotage hook expects a player address, but we have player name
@@ -539,7 +600,7 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
           break;
         
         default:
-          console.warn(`⚠️ Unknown action type: ${selectedAction}`);
+          console.warn(`⚠️ Unknown action type: ${actionType}`);
       }
     } catch (error) {
       console.error(`❌ Error executing Dojo action ${selectedAction}:`, error);
@@ -590,27 +651,58 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
     }
   };
 
-  // Loading state - show different messages based on what's missing
-  if (!contextLoaded || !connected || !gameState) {
-    let loadingMessage = 'Loading Game...';
-    let showRetryButton = false;
+  // Show initial loading only for critical missing pieces
+  if (!contextLoaded) {
+    return (
+      <div className="min-h-screen bg-pixel-black scanlines p-6 font-pixel flex items-center justify-center">
+        <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-8">
+          <h2 className="text-pixel-xl font-bold text-pixel-primary text-center mb-4">
+            Initializing...
+          </h2>
+        </div>
+      </div>
+    );
+  }
+
+  // Show connection loading
+  if (!connected) {
+    return (
+      <div className="min-h-screen bg-pixel-black scanlines p-6 font-pixel flex items-center justify-center">
+        <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-8">
+          <h2 className="text-pixel-xl font-bold text-pixel-primary text-center mb-4">
+            Connecting to server...
+          </h2>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error for missing game ID
+  if (!effectiveGameId) {
+    return (
+      <div className="min-h-screen bg-pixel-black scanlines p-6 font-pixel flex items-center justify-center">
+        <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-8">
+          <h2 className="text-pixel-xl font-bold text-pixel-primary text-center mb-4">
+            No game selected...
+          </h2>
+          <div className="mt-6 text-center">
+            <button
+              onClick={handleExitGame}
+              className="px-6 py-3 bg-pixel-gray hover:bg-pixel-light-gray text-pixel-primary font-bold text-pixel-base pixel-btn border-pixel-gray uppercase tracking-wider"
+            >
+              Exit to Lobby
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If we have gameId but no gameState yet, show retry option
+  if (!gameState) {
+    let loadingMessage = 'Loading Game State...';
+    let showRetryButton = true;
     let showExitButton = true;
-    
-    if (!contextLoaded) {
-      loadingMessage = 'Initializing...';
-      showExitButton = false;
-    } else if (!connected) {
-      loadingMessage = 'Connecting to server...';
-      showExitButton = false;
-    } else if (!effectiveGameId) {
-      loadingMessage = 'No game selected...';
-      showRetryButton = false;
-      showExitButton = true;
-    } else if (!gameState) {
-      loadingMessage = 'Loading Game State...';
-      showRetryButton = true;
-      showExitButton = true;
-    }
     
     console.log('GameInterface Loading State:', {
       contextLoaded,
@@ -708,7 +800,18 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
               <button
                 onClick={() => {
                   playSound('click');
-                  navigator.clipboard.writeText(effectiveGameId || '');
+                  if (effectiveGameId) {
+                    navigator.clipboard.writeText(effectiveGameId)
+                      .then(() => {
+                        addNotification('📋 Game ID copied to clipboard!');
+                      })
+                      .catch((err) => {
+                        console.error('Failed to copy game ID:', err);
+                        addNotification('❌ Failed to copy Game ID');
+                      });
+                  } else {
+                    addNotification('❌ No Game ID to copy');
+                  }
                 }}
                 className="mt-4 w-full px-4 py-2 bg-pixel-accent hover:bg-pixel-success text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider"
               >
@@ -862,11 +965,22 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
               targetPlayer={targetPlayer}
               players={gameState.players}
               currentPlayer={currentPlayer || { id: '', name: '', tokens: 0, assets: { gold: 0, water: 0, oil: 0 }, totalAssets: 0 }}
-              onActionChange={setSelectedAction}
-              onResourceChange={setSelectedResource}
+              onActionChange={(action: ActionType) => {
+                setSelectedActionLocal(action);
+                setSelectedAction(action); // Also update Zustand store
+              }}
+              onResourceChange={(resource: AssetType) => {
+                setSelectedResource(resource);
+                setSelectedAsset(resource); // Also update Zustand store
+              }}
               onAmountChange={setAmount}
               onTargetChange={setTargetPlayer}
-              onConfirmAction={handleAction}
+                  onConfirmAction={handlePlayerAction}
+                  dojoMarket={dojoMarket}
+                  canBuyAsset={canBuyAsset}
+                  canSellAsset={canSellAsset}
+                  canBurnAsset={canBurnAsset}
+                  canSabotage={canSabotage}
             />
             
             {/* Dojo Transaction Status Panel */}

@@ -1,6 +1,16 @@
 import React from 'react';
 import { Circle, TrendingUp, TrendingDown } from 'lucide-react';
-import { MarketChange } from '../types/game';
+import { AssetType } from '../zustand/store';
+import useAppStore from '../zustand/store';
+import { useMarket } from '../dojo/hooks/fetchMarket';
+import { BigNumberUtils } from '../zustand/store';
+
+// Local interface definition - MarketChange for UI components
+interface MarketChange {
+  resource: 'gold' | 'water' | 'oil';
+  change: number;
+  percentage: string;
+}
 
 interface AssetsListProps {
   assets: {

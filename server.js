@@ -68,8 +68,8 @@ function createPlayer(playerId, playerName, socketId, walletAddress = null) {
     socketId: socketId,
     walletAddress: walletAddress,
     tokens: 1000,
-    assets: { gold: 50, water: 25, oil: 10 },
-    totalAssets: 85,
+    assets: { gold: 0, water: 0, oil: 0 },
+    totalAssets: 0,
     connected: true
   };
 }
@@ -667,12 +667,42 @@ setInterval(() => {
   });
 }, 5000);
 
-// Cleanup old finished games every hour
+// Comprehensive database cleanup every hour
 setInterval(async () => {
   try {
-    await GameDatabase.cleanupOldGames(24); // Remove games older than 24 hours
+    console.log('🧹 Running scheduled database cleanup...');
+    const result = await GameDatabase.performFullCleanup();
+    
+    if (result.success) {
+      // Also clean up memory states for removed games
+      if (result.staleGamesRemoved > 0 || result.abandonedGamesRemoved > 0) {
+        console.log('🧹 Cleaning up memory states for removed games...');
+        
+        // Get current active game IDs from database to sync memory
+        const activeDbGames = await GameDatabase.getPublicGames();
+        const activeDbGameIds = new Set(activeDbGames.map(g => g.game_id));
+        
+        // Remove memory states for games that no longer exist in database
+        for (const [gameId] of activeGameStates) {
+          if (!activeDbGameIds.has(gameId)) {
+            console.log(`🧹 Removing memory state for deleted game: ${gameId}`);
+            activeGameStates.delete(gameId);
+            
+            // Clear any associated timers
+            if (gameTimers.has(gameId)) {
+              clearInterval(gameTimers.get(gameId));
+              gameTimers.delete(gameId);
+            }
+            if (inactivityTimers.has(gameId)) {
+              clearTimeout(inactivityTimers.get(gameId));
+              inactivityTimers.delete(gameId);
+            }
+          }
+        }
+      }
+    }
   } catch (error) {
-    console.error('Error during cleanup:', error);
+    console.error('❌ Error during comprehensive cleanup:', error);
   }
 }, 60 * 60 * 1000); // Every hour
 
