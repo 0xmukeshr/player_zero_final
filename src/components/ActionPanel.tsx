@@ -127,16 +127,16 @@ export function ActionPanel({
   };
 
   return (
-    <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3 space-y-3">
+    <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3 sm:p-4 space-y-3">
       {/* Header with Toggle */}
       <div className="flex items-center justify-between">
-        <h3 className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">Actions</h3>
+        <h3 className="text-pixel-xs sm:text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">Actions</h3>
         <button
           onClick={() => {
             playSound('click');
             setShowAdvanced(!showAdvanced);
           }}
-          className="px-2 py-1 bg-pixel-gray hover:bg-pixel-light-gray pixel-btn border-pixel-light-gray text-pixel-xs text-pixel-accent font-bold uppercase"
+          className="px-2 py-1 bg-pixel-gray hover:bg-pixel-light-gray pixel-btn border-pixel-light-gray text-pixel-xs text-pixel-accent font-bold uppercase min-h-touch"
         >
           {showAdvanced ? 'Simple' : 'Advanced'}
         </button>

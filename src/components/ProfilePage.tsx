@@ -142,12 +142,12 @@ export function ProfilePage() {
   // No profile state
   if (!userProfile) {
     return (
-      <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="max-w-4xl mx-auto px-8 py-10">
         <div className="text-center">
           <h1 className="text-pixel-2xl font-bold text-pixel-primary mb-6 uppercase tracking-wider">
             No Profile Found
           </h1>
-          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-8">
+          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-10">
             <div className="text-6xl mb-4">👤</div>
             <p className="text-pixel-base-gray text-pixel-base mb-6">
               You haven't created a profile yet. Create one to start playing!
@@ -165,15 +165,15 @@ export function ProfilePage() {
   }
   
   return (
-    <div className="max-w-7xl mx-auto px-6 py-6">
+    <div className="max-w-7xl mx-auto px-8 py-8">
       <h1 className="text-pixel-2xl font-bold text-pixel-primary mb-6 uppercase tracking-wider text-center">
         Player Profile
       </h1>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Profile Card */}
         <div className="lg:col-span-1">
-          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-4">
+          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6">
             {!isEditing ? (
               <>
                 <div className="text-center mb-4">
@@ -207,7 +207,7 @@ export function ProfilePage() {
                 </div>
                 
                 <div className="space-y-3">
-                  <div className="pixel-card bg-pixel-gray border-pixel-light-gray p-2">
+                  <div className="pixel-card bg-pixel-gray border-pixel-light-gray p-3">
                     <div className="flex items-center space-x-2">
                       <User className="w-4 h-4 text-pixel-primary" />
                       <span className="text-pixel-xs text-pixel-light-gray font-bold uppercase">
@@ -325,9 +325,9 @@ export function ProfilePage() {
         {/* Stats and Recent Games */}
         <div className="lg:col-span-2 space-y-4">
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {stats.map((stat, index) => (
-              <div key={index} className={`bg-pixel-gray pixel-card ${stat.borderColor} p-3`}>
+              <div key={index} className={`bg-pixel-gray pixel-card ${stat.borderColor} p-4`}>
                 <div className={`flex items-center justify-center w-8 h-8 ${stat.bgColor} pixel-avatar mb-2`}>
                   <stat.icon className="w-4 h-4 text-pixel-black" />
                 </div>
@@ -339,10 +339,10 @@ export function ProfilePage() {
 
           {/* Recent Games */}
           <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray">
-            <div className="px-4 py-3 border-b-2 border-pixel-gray">
+            <div className="px-6 py-4 border-b-2 border-pixel-gray">
               <h3 className="text-pixel-base font-bold text-pixel-primary uppercase tracking-wider text-center">Recent Games</h3>
             </div>
-            <div className="p-3 space-y-2">
+            <div className="p-4 space-y-3">
               {recentGames.map((game, index) => (
                 <div key={index} className="pixel-card bg-pixel-gray border-pixel-light-gray p-3 hover:bg-pixel-light-gray transition-colors">
                   <div className="flex items-center justify-between">
@@ -369,11 +369,11 @@ export function ProfilePage() {
           
           {/* Achievements */}
           <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray">
-            <div className="px-4 py-3 border-b-2 border-pixel-gray">
+            <div className="px-6 py-4 border-b-2 border-pixel-gray">
               <h3 className="text-pixel-base font-bold text-pixel-primary uppercase tracking-wider text-center">Achievements</h3>
             </div>
-            <div className="p-3">
-              <div className="grid grid-cols-2 gap-2">
+            <div className="p-4">
+              <div className="grid grid-cols-2 gap-3">
                 {achievements.map((achievement, index) => (
                   <div key={index} className={`pixel-card p-2 ${
                     achievement.unlocked 
@@ -408,8 +408,8 @@ export function ProfilePage() {
       
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-75 z-50">
-          <div className="bg-pixel-error p-8 pixel-panel border-pixel-error max-w-md w-full mx-4">
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-75 z-50 p-4">
+          <div className="bg-pixel-error p-8 sm:p-10 pixel-panel border-pixel-error max-w-lg w-full mx-4">
             <h3 className="text-pixel-xl font-bold text-pixel-black text-center mb-6 uppercase tracking-wider">
               Delete Profile?
             </h3>

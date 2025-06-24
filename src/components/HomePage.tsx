@@ -76,27 +76,51 @@ export function HomePage({ onNavigateToGames }: HomePageProps) {
   ];
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-screen-safe flex items-center justify-center px-4 py-6 relative">
+      {/* Music Toggle - Fixed position for mobile */}
+      <button
+        onClick={toggleMusic}
+        className="fixed top-4 right-4 z-10 w-10 h-10 sm:w-14 sm:h-14 bg-pixel-dark-gray hover:bg-pixel-gray pixel-btn border-pixel-light-gray flex items-center justify-center"
+        title={musicMuted ? 'Unmute Music' : 'Mute Music'}
+      >
+        {musicMuted ? (
+          <VolumeX className="w-4 h-4 sm:w-5 sm:h-5 text-pixel-primary" />
+        ) : (
+          <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-pixel-primary" />
+        )}
+      </button>
+
       {/* Centered Hero Section */}
-      <div className="text-center max-w-4xl mx-auto">
-        <h1 className="text-5xl md:text-6xl font-bold text-pixel-primary mb-8 uppercase tracking-wider">
-          <span className="relative -top-[20px] block">Welcome</span>
-          <span className="text-pixel-accent">Player_Zero</span>
+      <div className="text-center max-w-4xl mx-auto w-full">
+        <h1 className="text-pixel-2xl xs:text-pixel-3xl sm:text-4xl md:text-5xl font-bold text-pixel-primary mb-4 sm:mb-6 uppercase tracking-wide">
+          <span className="relative block mb-2">Welcome</span>
+          <span className="text-pixel-accent block">Player_Zero</span>
         </h1>
 
-        <p className="text-pixel-lg text-pixel-base-gray mb-12 max-w-3xl mx-auto leading-relaxed">
+        <p className="text-pixel-sm sm:text-pixel-base md:text-pixel-lg text-pixel-base-gray mb-6 sm:mb-8 max-w-3xl mx-auto leading-relaxed px-2">
           Master the art of strategic warfare in intense multiplayer battles. 
           Join thousands of players in the ultimate test of tactical prowess.
         </p>
+
+
+
+        {/* Main CTA Button */}
         <button
           onClick={() => {
             playSound('switch');
             onNavigateToGames();
           }}
-          className="px-12 py-6 bg-pixel-primary text-pixel-black font-bold text-pixel-xl uppercase tracking-wider pixel-btn border-pixel-black"
+          className="w-full max-w-sm sm:max-w-none sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-base sm:text-pixel-lg uppercase tracking-wide pixel-btn border-pixel-black transition-colors duration-200 min-h-touch"
         >
-          Enter Game Lobby
+          <span className="block sm:inline">Enter Game Lobby</span>
         </button>
+
+        {/* Additional mobile info */}
+        <div className="mt-6 sm:hidden">
+          <p className="text-pixel-xs text-pixel-base-gray opacity-75">
+            Best experienced in landscape mode
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -542,26 +542,47 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
-      <h2 className="text-pixel-2xl font-bold text-pixel-primary mb-8 uppercase tracking-wider text-center">
-        Multiplayer Lobby
-      </h2>
-      
-      {!connected && (
-        <div className="bg-pixel-error p-4 pixel-panel border-pixel-error mb-6">
-          <p className="text-pixel-black text-center font-bold">
-            Connecting to server...
-          </p>
+    <div className="min-h-screen-safe bg-pixel-black scanlines p-4 sm:p-8 font-pixel">
+      <div className="max-w-6xl mx-auto px-2 sm:px-4">
+        {/* Header with connection status */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 space-y-3 sm:space-y-0">
+          <h2 className="text-pixel-xl sm:text-pixel-2xl font-bold text-pixel-primary uppercase tracking-wide">
+            <span className="hidden sm:inline">Multiplayer Lobby</span>
+            <span className="sm:hidden">Lobby</span>
+          </h2>
+          <div className="flex flex-col xs:flex-row items-start xs:items-center space-y-2 xs:space-y-0 xs:space-x-3">
+            <div className="text-pixel-base-gray text-pixel-xs sm:text-pixel-sm font-bold pixel-notification bg-pixel-dark-gray border-pixel-gray px-2 sm:px-3 py-1">
+              {connected ? '🟢 Connected' : '🟡 Connecting...'}
+            </div>
+            {status === 'connected' ? (
+              <div className="bg-pixel-success pixel-notification border-pixel-success text-pixel-black px-2 sm:px-3 py-1 font-bold text-pixel-xs sm:text-pixel-sm">
+                <span className="hidden xs:inline">✓ Wallet Connected</span>
+                <span className="xs:hidden">✓ Wallet</span>
+              </div>
+            ) : (
+              <div className="bg-pixel-warning pixel-notification border-pixel-warning text-pixel-black px-2 sm:px-3 py-1 font-bold text-pixel-xs sm:text-pixel-sm">
+                <span className="hidden xs:inline">⚠ Connect Wallet</span>
+                <span className="xs:hidden">⚠ Wallet</span>
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      
+        {!connected && (
+          <div className="bg-pixel-error p-4 pixel-panel border-pixel-error mb-6">
+            <p className="text-pixel-black text-center font-bold text-pixel-sm sm:text-pixel-base">
+              Connecting to server...
+            </p>
+          </div>
+        )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6">
         {/* Create Game Card */}
-        <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6">
-          <h3 className="text-pixel-xl font-bold text-pixel-primary mb-4 uppercase tracking-wider text-center">
+        <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-5 sm:p-8">
+          <h3 className="text-pixel-xl font-bold text-pixel-primary mb-3 uppercase tracking-wide text-center">
             Create Game
           </h3>
-          <p className="text-pixel-base-gray text-pixel-sm mb-6 text-center">
+          <p className="text-pixel-base-gray text-pixel-sm mb-4 text-center">
             Start a new multiplayer game and invite friends
           </p>
           <button
@@ -570,18 +591,18 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
               setShowCreateModal(true);
             }}
             disabled={!connected}
-            className="w-full px-6 py-4 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-base pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-6 py-3 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-base pixel-btn border-pixel-black uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Create New Game
           </button>
         </div>
 
         {/* Join Game Card */}
-        <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6">
-          <h3 className="text-pixel-xl font-bold text-pixel-primary mb-4 uppercase tracking-wider text-center">
+        <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-5 sm:p-8">
+          <h3 className="text-pixel-xl font-bold text-pixel-primary mb-3 uppercase tracking-wide text-center">
             Join Game
           </h3>
-          <p className="text-pixel-base-gray text-pixel-sm mb-6 text-center">
+          <p className="text-pixel-base-gray text-pixel-sm mb-4 text-center">
             Enter a game ID to join an existing game
           </p>
           <button
@@ -590,7 +611,7 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
               setShowJoinModal(true);
             }}
             disabled={!connected}
-            className="w-full px-6 py-4 bg-pixel-accent hover:bg-pixel-success text-pixel-black font-bold text-pixel-base pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-6 py-3 bg-pixel-accent hover:bg-pixel-success text-pixel-black font-bold text-pixel-base pixel-btn border-pixel-black uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Join by Game ID
           </button>
@@ -598,9 +619,9 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
       </div>
 
       {/* Public Games Section */}
-      <div className="mt-8">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-pixel-xl font-bold text-pixel-primary uppercase tracking-wider">
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-pixel-xl font-bold text-pixel-primary uppercase tracking-wide">
             Public Games
           </h3>
           <button
@@ -609,98 +630,148 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
               loadPublicGames();
             }}
             disabled={refreshingGames || !connected}
-            className="px-4 py-2 bg-pixel-accent hover:bg-pixel-primary text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-2 bg-pixel-accent hover:bg-pixel-primary text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {refreshingGames ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
 
         {publicGames.length === 0 ? (
-          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6 text-center">
-            <p className="text-pixel-base-gray text-pixel-base">
+          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-8 text-center">
+            <p className="text-pixel-base-gray text-pixel-sm sm:text-pixel-base">
               No public games available. Create one to get started!
             </p>
           </div>
         ) : (
-          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-pixel-gray border-b-4 border-pixel-black">
-                    <th className="text-left px-4 py-3 text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
-                      Name
-                    </th>
-                    <th className="text-center px-4 py-3 text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="text-center px-4 py-3 text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
-                      Host
-                    </th>
-                    <th className="text-center px-4 py-3 text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
-                      Players
-                    </th>
-                    <th className="text-center px-4 py-3 text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
-                      Join Game
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {publicGames.map((game, index) => (
-                    <tr 
-                      key={game.id} 
-                      className={`border-b-2 border-pixel-black hover:bg-pixel-light-gray transition-colors ${
-                        index % 2 === 0 ? 'bg-pixel-dark-gray' : 'bg-pixel-black'
-                      }`}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="text-pixel-base font-bold text-pixel-base-gray truncate max-w-xs">
-                          {game.name}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`px-3 py-1 text-pixel-xs font-bold pixel-notification ${
-                          game.status === 'Open' 
-                            ? 'bg-pixel-success text-pixel-black border-pixel-success'
-                            : 'bg-pixel-warning text-pixel-black border-pixel-warning'
-                        }`}>
-                          {game.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-pixel-sm font-bold text-pixel-base-gray">
-                          {game.hostName}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-pixel-sm font-bold text-pixel-base-gray">
-                          {game.currentPlayers}/{game.maxPlayers}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => {
-                            playSound('click');
-                            handleJoinPublicGame(game.id);
-                          }}
-                          disabled={game.status !== 'Open' || !connected || joiningGameId !== null}
-                          className="px-4 py-2 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {joiningGameId === game.id ? 'Joining...' : (game.status === 'Open' ? 'Join' : 'Full')}
-                        </button>
-                      </td>
+          <>
+            {/* Desktop Table */}
+            <div className="hidden md:block bg-pixel-dark-gray pixel-panel border-pixel-gray overflow-hidden mx-2 sm:mx-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-pixel-gray border-b-4 border-pixel-black">
+                      <th className="text-left px-6 py-4 text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
+                        Name
+                      </th>
+                      <th className="text-center px-6 py-4 text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="text-center px-4 py-3 text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
+                        Host
+                      </th>
+                      <th className="text-center px-4 py-3 text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
+                        Players
+                      </th>
+                      <th className="text-center px-4 py-3 text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
+                        Join Game
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {publicGames.map((game, index) => (
+                      <tr 
+                        key={game.id} 
+                        className={`border-b-2 border-pixel-black hover:bg-pixel-light-gray transition-colors ${
+                          index % 2 === 0 ? 'bg-pixel-dark-gray' : 'bg-pixel-black'
+                        }`}
+                      >
+                        <td className="px-6 py-4">
+                          <div className="text-pixel-base font-bold text-pixel-base-gray truncate max-w-xs">
+                            {game.name}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`px-3 py-1 text-pixel-xs font-bold pixel-notification ${
+                            game.status === 'Open' 
+                              ? 'bg-pixel-success text-pixel-black border-pixel-success'
+                              : 'bg-pixel-warning text-pixel-black border-pixel-warning'
+                          }`}>
+                            {game.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-pixel-sm font-bold text-pixel-base-gray">
+                            {game.hostName}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-pixel-sm font-bold text-pixel-base-gray">
+                            {game.currentPlayers}/{game.maxPlayers}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => {
+                              playSound('click');
+                              handleJoinPublicGame(game.id);
+                            }}
+                            disabled={game.status !== 'Open' || !connected || joiningGameId !== null}
+                            className="px-4 py-2 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed min-h-touch"
+                          >
+                            {joiningGameId === game.id ? 'Joining...' : (game.status === 'Open' ? 'Join' : 'Full')}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+
+            {/* Mobile Card Layout */}
+            <div className="md:hidden space-y-4 px-2">
+              {publicGames.map((game, index) => (
+                <div key={game.id} className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-5 hover:bg-pixel-gray transition-colors">
+                  <div className="flex flex-col space-y-3">
+                    {/* Game Name */}
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-pixel-sm font-bold text-pixel-primary truncate flex-1 mr-2">
+                        {game.name}
+                      </h4>
+                      <span className={`px-2 py-1 text-pixel-xs font-bold pixel-notification whitespace-nowrap ${
+                        game.status === 'Open' 
+                          ? 'bg-pixel-success text-pixel-black border-pixel-success'
+                          : 'bg-pixel-warning text-pixel-black border-pixel-warning'
+                      }`}>
+                        {game.status}
+                      </span>
+                    </div>
+                    
+                    {/* Game Info */}
+                    <div className="grid grid-cols-2 gap-3 text-pixel-xs">
+                      <div>
+                        <span className="text-pixel-base-gray font-bold block">Host:</span>
+                        <span className="text-pixel-accent">{game.hostName}</span>
+                      </div>
+                      <div>
+                        <span className="text-pixel-base-gray font-bold block">Players:</span>
+                        <span className="text-pixel-accent">{game.currentPlayers}/{game.maxPlayers}</span>
+                      </div>
+                    </div>
+                    
+                    {/* Join Button */}
+                    <button
+                      onClick={() => {
+                        playSound('click');
+                        handleJoinPublicGame(game.id);
+                      }}
+                      disabled={game.status !== 'Open' || !connected || joiningGameId !== null}
+                      className="w-full px-4 py-3 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed min-h-touch"
+                    >
+                      {joiningGameId === game.id ? 'Joining...' : (game.status === 'Open' ? 'Join Game' : 'Game Full')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
       {/* Create Game Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-75 z-50">
-          <div className="bg-pixel-light-gray p-8 pixel-panel border-pixel-black max-w-md w-full mx-4">
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-75 z-50 p-4">
+          <div className="bg-pixel-light-gray p-8 sm:p-10 pixel-panel border-pixel-black max-w-lg w-full mx-4">
             <h3 className="text-pixel-xl font-bold text-pixel-primary text-center mb-6 uppercase tracking-wider">
               Create New Game
             </h3>
@@ -830,8 +901,8 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
 
       {/* Join by ID Modal */}
       {showJoinModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-75 z-50">
-          <div className={`p-8 pixel-panel max-w-md w-full mx-4 ${
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-75 z-50 p-4">
+          <div className={`p-8 sm:p-10 pixel-panel max-w-lg w-full mx-4 ${
             joinError ? 'bg-pixel-error border-pixel-error' : 'bg-pixel-light-gray border-pixel-black'
           }`}>
             <h3 className={`text-pixel-xl font-bold text-center mb-6 uppercase tracking-wider ${
@@ -909,5 +980,7 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
       )}
 
     </div>
+   </div>
   );
+  
 }

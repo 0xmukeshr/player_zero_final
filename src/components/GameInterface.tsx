@@ -138,9 +138,31 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
   const [showWinnerModal, setShowWinnerModal] = useState(false);
   const [gameFinished, setGameFinished] = useState(false);
   const [isLastThreeSeconds, setIsLastThreeSeconds] = useState(false);
+  
+  // Mobile UI state
+  const [activeTab, setActiveTab] = useState<'wallet' | 'assets' | 'actions' | 'stats'>('actions');
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   // Track if we've already requested game state
   const gameStateRequestedRef = useRef(false);
+  
+  // Handle orientation and screen size changes
+  useEffect(() => {
+    const handleResize = () => {
+      setIsLandscape(window.innerWidth > window.innerHeight);
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, []);
 
   // Initialize Dojo hooks with error handling
   let buyAssetState, executeBuyAsset, canBuyAsset, resetBuyAssetState;
@@ -911,32 +933,94 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
     );
   }
 
+  // Mobile tab content renderer
+  const renderMobileTabContent = () => {
+    switch (activeTab) {
+      case 'wallet':
+        return (
+          <PlayerWallet 
+            tokens={currentPlayer?.tokens || 0} 
+            assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }} 
+          />
+        );
+      case 'assets':
+        return (
+          <AssetsList 
+            assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }} 
+            marketChanges={gameState.marketChanges} 
+          />
+        );
+      case 'actions':
+        return (
+          <ActionPanel
+            selectedAction={selectedAction}
+            selectedResource={selectedResource}
+            amount={amount}
+            targetPlayer={targetPlayer}
+            players={gameState.players}
+            currentPlayer={currentPlayer || { id: '', name: '', tokens: 0, assets: { gold: 0, water: 0, oil: 0 }, totalAssets: 0 }}
+            onActionChange={(action: ActionType) => {
+              setSelectedActionLocal(action);
+              setSelectedAction(action);
+            }}
+            onResourceChange={(resource: AssetType) => {
+              setSelectedResource(resource);
+              setSelectedAsset(resource);
+            }}
+            onAmountChange={setAmount}
+            onTargetChange={setTargetPlayer}
+            onConfirmAction={handlePlayerAction}
+          />
+        );
+      case 'stats':
+        return <PlayerStats players={gameState.players} />;
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className={`min-h-screen scanlines p-6 font-pixel ${
+    <div className={`min-h-screen-safe scanlines font-pixel ${
       isLastThreeSeconds 
         ? 'bg-red-900 bg-opacity-50' 
         : 'bg-pixel-black'
     }`}>
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full mx-auto p-2 sm:p-4">
         {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <h1 className="text-pixel-lg font-bold text-pixel-primary uppercase tracking-wider">Trading Game</h1>
-          <div className="flex items-center space-x-3">
-            <div className="text-pixel-base-gray text-pixel-sm font-bold pixel-notification bg-pixel-dark-gray border-pixel-gray px-2 py-1">
-              Round {gameState.currentRound}/{gameState.maxRounds}
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-pixel-xs sm:text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
+            <span className="hidden sm:inline">Trading Game</span>
+            <span className="sm:hidden">Game</span>
+          </h1>
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <div className="text-pixel-base-gray text-pixel-xs sm:text-pixel-sm font-bold pixel-notification bg-pixel-dark-gray border-pixel-gray px-2 py-1">
+              R {gameState.currentRound}/{gameState.maxRounds}
             </div>
+            {/* Portrait mode warning for mobile */}
+            {isMobile && !isLandscape && (
+              <div className="text-pixel-xs text-pixel-warning bg-pixel-dark-gray border-pixel-warning px-2 py-1 pixel-notification">
+                📱 Rotate for better view
+              </div>
+            )}
             <button
               onClick={onExitGame}
-              className="px-3 py-1 bg-pixel-error hover:bg-pixel-warning text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black uppercase tracking-wider"
+              className="px-2 sm:px-3 py-1 bg-pixel-error hover:bg-pixel-warning text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black uppercase tracking-wider min-h-touch"
             >
-              Exit
+              <span className="hidden sm:inline">Exit</span>
+              <span className="sm:hidden">❌</span>
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        {/* Timer - Always visible on mobile */}
+        <div className="md:hidden mb-3">
+          <Timer timeRemaining={gameState.timeRemaining} />
+        </div>
+
+        {/* Desktop Layout */}
+        <div className="hidden md:grid md:grid-cols-12 gap-3">
           {/* Left Column - Compact Info Panels */}
-          <div className="lg:col-span-3 space-y-3">
+          <div className="md:col-span-3 space-y-3">
             <Timer timeRemaining={gameState.timeRemaining} />
             <AssetsList assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }} marketChanges={gameState.marketChanges} />
             <RecentActions 
@@ -948,7 +1032,7 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
           </div>
 
           {/* Middle Column - Player Info */}
-          <div className="lg:col-span-5 space-y-3">
+          <div className="md:col-span-5 space-y-3">
             <PlayerWallet 
               tokens={currentPlayer?.tokens || 0} 
               assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }} 
@@ -957,7 +1041,7 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
           </div>
 
           {/* Right Column - Actions */}
-          <div className="lg:col-span-4 space-y-3">
+          <div className="md:col-span-4 space-y-3">
             <ActionPanel
               selectedAction={selectedAction}
               selectedResource={selectedResource}
@@ -975,12 +1059,7 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
               }}
               onAmountChange={setAmount}
               onTargetChange={setTargetPlayer}
-                  onConfirmAction={handlePlayerAction}
-                  dojoMarket={dojoMarket}
-                  canBuyAsset={canBuyAsset}
-                  canSellAsset={canSellAsset}
-                  canBurnAsset={canBurnAsset}
-                  canSabotage={canSabotage}
+              onConfirmAction={handlePlayerAction}
             />
             
             {/* Dojo Transaction Status Panel */}
@@ -1174,6 +1253,89 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Mobile Layout */}
+        <div className="md:hidden space-y-3">
+          {/* Mobile Tab Navigation */}
+          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-2">
+            <div className="grid grid-cols-4 gap-1">
+              {[
+                { id: 'wallet', label: 'Wallet', icon: '💰' },
+                { id: 'assets', label: 'Assets', icon: '📦' },
+                { id: 'actions', label: 'Actions', icon: '⚡' },
+                { id: 'stats', label: 'Stats', icon: '📊' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    playSound('click');
+                    setActiveTab(tab.id as typeof activeTab);
+                  }}
+                  className={`px-2 py-2 pixel-btn text-pixel-xs font-bold uppercase tracking-wider flex flex-col items-center space-y-1 min-h-touch ${
+                    activeTab === tab.id
+                      ? 'bg-pixel-primary text-pixel-black border-pixel-primary'
+                      : 'bg-pixel-gray text-pixel-primary border-pixel-light-gray hover:bg-pixel-light-gray'
+                  }`}
+                >
+                  <span className="text-sm">{tab.icon}</span>
+                  <span className="hidden xs:inline">{tab.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Mobile Tab Content */}
+          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3">
+            {renderMobileTabContent()}
+          </div>
+
+          {/* Mobile Recent Actions - Always visible */}
+          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3">
+            <h3 className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider mb-2">
+              Recent Actions
+            </h3>
+            <div className="space-y-1">
+              {gameState.recentActions?.slice(0, 3).map((action: string, index: number) => (
+                <div key={index} className="text-pixel-xs text-pixel-base-gray bg-pixel-gray pixel-panel border-pixel-light-gray p-2">
+                  {action}
+                </div>
+              )) || (
+                <div className="text-pixel-xs text-pixel-base-gray italic">
+                  No recent actions
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Mobile Dojo Status - Collapsible */}
+          {(buyAssetState.isLoading || sellAssetState.isLoading || burnAssetState.isLoading || sabotageState.isLoading || 
+            buyAssetState.error || sellAssetState.error || burnAssetState.error || sabotageState.error ||
+            buyAssetState.txStatus || sellAssetState.txStatus || burnAssetState.txStatus || sabotageState.txStatus) && (
+            <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3">
+              <h3 className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider mb-2">
+                Transaction Status
+              </h3>
+              
+              {/* Compact status display for mobile */}
+              <div className="space-y-2">
+                {buyAssetState.isLoading && <div className="text-pixel-xs text-pixel-warning">⏳ Buying...</div>}
+                {sellAssetState.isLoading && <div className="text-pixel-xs text-pixel-warning">⏳ Selling...</div>}
+                {burnAssetState.isLoading && <div className="text-pixel-xs text-pixel-warning">⏳ Burning...</div>}
+                {sabotageState.isLoading && <div className="text-pixel-xs text-pixel-warning">⏳ Sabotaging...</div>}
+                
+                {buyAssetState.error && <div className="text-pixel-xs text-pixel-error">❌ Buy failed</div>}
+                {sellAssetState.error && <div className="text-pixel-xs text-pixel-error">❌ Sell failed</div>}
+                {burnAssetState.error && <div className="text-pixel-xs text-pixel-error">❌ Burn failed</div>}
+                {sabotageState.error && <div className="text-pixel-xs text-pixel-error">❌ Sabotage failed</div>}
+                
+                {buyAssetState.txStatus === 'SUCCESS' && <div className="text-pixel-xs text-pixel-success">✅ Buy successful</div>}
+                {sellAssetState.txStatus === 'SUCCESS' && <div className="text-pixel-xs text-pixel-success">✅ Sell successful</div>}
+                {burnAssetState.txStatus === 'SUCCESS' && <div className="text-pixel-xs text-pixel-success">✅ Burn successful</div>}
+                {sabotageState.txStatus === 'SUCCESS' && <div className="text-pixel-xs text-pixel-success">✅ Sabotage successful</div>}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Notifications */}
