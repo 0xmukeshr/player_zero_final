@@ -126,6 +126,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
           console.log('SocketContext: Game created event received on socket:', socketInstance.id, data);
           if (!isActiveConnection) return;
           
+          // Immediately set the game info in state
+          console.log('SocketContext: Setting game ID and player ID from game-created event');
           setGameId(data.gameId);
           setPlayerId(data.playerId);
           
@@ -137,12 +139,18 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
               console.log('SocketContext: Setting player name from profile:', profile.name);
               setPlayerName(profile.name);
               
-              // Store complete game info in localStorage
-              localStorage.setItem('currentGameInfo', JSON.stringify({
+              // Store complete game info in localStorage immediately
+              const gameInfo = {
                 gameId: data.gameId,
                 playerId: data.playerId,
-                playerName: profile.name
-              }));
+                playerName: profile.name,
+                isCreator: true  // Mark as game creator for host detection
+              };
+              
+              localStorage.setItem('currentGameInfo', JSON.stringify(gameInfo));
+              console.log('SocketContext: Game info stored in localStorage:', gameInfo);
+            } else {
+              console.warn('SocketContext: No user profile found in localStorage');
             }
           } catch (error) {
             console.error('SocketContext: Error getting player name from profile:', error);
@@ -168,7 +176,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
               localStorage.setItem('currentGameInfo', JSON.stringify({
                 gameId: data.gameId,
                 playerId: data.playerId,
-                playerName: profile.name
+                playerName: profile.name,
+                isCreator: false  // Not the creator, just joining
               }));
             }
           } catch (error) {

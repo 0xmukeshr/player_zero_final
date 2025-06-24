@@ -58,11 +58,12 @@ function createInitialGameState() {
 }
 
 // Create initial player state
-function createPlayer(playerId, playerName, socketId) {
+function createPlayer(playerId, playerName, socketId, walletAddress = null) {
   return {
     id: playerId,
     name: playerName,
     socketId: socketId,
+    walletAddress: walletAddress,
     tokens: 1000,
     assets: { gold: 50, water: 25, oil: 10 },
     totalAssets: 85,
@@ -100,12 +101,14 @@ io.on('connection', (socket) => {
   // Create a new game
   socket.on('create-game', async (data) => {
     try {
-      const { gameName, playerName, isPrivate } = data;
+      const { gameName, playerName, isPrivate, walletAddress } = data;
       const gameId = generateGameId();
       const playerId = generatePlayerId();
       
+      console.log(`🎮 Creating game with host wallet: ${walletAddress}`);
+      
       const gameState = createInitialGameState();
-      const player = createPlayer(playerId, playerName, socket.id);
+      const player = createPlayer(playerId, playerName, socket.id, walletAddress);
       
       gameState.players.push(player);
       gameState.host = playerId;
@@ -135,14 +138,14 @@ io.on('connection', (socket) => {
       // Join the game room
       socket.join(gameId);
       
-      console.log(`Server: Emitting game-created and game-state for game ${gameId}`);
+      console.log(`Server: Emitting game-created for game ${gameId}`);
       socket.emit('game-created', { gameId, playerId });
       
       // Add a small delay to ensure game-created is processed first
       setTimeout(() => {
         console.log(`Server: Sending initial game state for game ${gameId}`);
         socket.emit('game-state', gameState);
-      }, 100);
+      }, 200); // Increased delay to 200ms for better synchronization
       
       console.log(`Game created: ${gameId} by ${playerName}`);
     } catch (error) {
@@ -163,7 +166,10 @@ io.on('connection', (socket) => {
   // Join an existing game
   socket.on('join-game', async (data) => {
     try {
-      const { gameId, playerName } = data;
+      const { gameId, playerName, walletAddress } = data;
+      
+      console.log(`🎮 Player joining with wallet: ${walletAddress}`);
+      
       
       // Check if game exists in memory first, otherwise load from database
       let game = activeGameStates.get(gameId);
@@ -199,7 +205,7 @@ io.on('connection', (socket) => {
       }
       
       const playerId = generatePlayerId();
-      const player = createPlayer(playerId, playerName, socket.id);
+      const player = createPlayer(playerId, playerName, socket.id, walletAddress);
       
       game.players.push(player);
       activeGameStates.set(gameId, game);
@@ -291,7 +297,26 @@ io.on('connection', (socket) => {
       if (!playerInfo) return;
       
       const game = activeGameStates.get(playerInfo.gameId);
-      if (!game || game.host !== playerInfo.playerId) {
+      
+      // Enhanced host verification with multiple criteria
+      const isHost = (
+        game.host === playerInfo.playerId ||  // Primary: Direct host ID match
+        game.players.find(p => p.id === playerInfo.playerId)?.walletAddress === game.players.find(p => p.id === game.host)?.walletAddress ||  // Secondary: Wallet match
+        (game.players.length > 0 && game.players[0].id === playerInfo.playerId)  // Fallback: First player
+      );
+      
+      console.log('🔍 HOST VERIFICATION:', {
+        gameId: playerInfo.gameId,
+        playerId: playerInfo.playerId,
+        playerName: playerInfo.playerName,
+        gameHost: game.host,
+        playerWallet: game.players.find(p => p.id === playerInfo.playerId)?.walletAddress,
+        hostWallet: game.players.find(p => p.id === game.host)?.walletAddress,
+        isFirstPlayer: game.players.length > 0 && game.players[0].id === playerInfo.playerId,
+        finalDecision: isHost ? 'ALLOW START' : 'DENY START'
+      });
+      
+      if (!game || !isHost) {
         socket.emit('error', { message: 'Only the host can start the game' });
         return;
       }

@@ -6,10 +6,12 @@ import { ProfilePage } from '../components/ProfilePage';
 import { ProfileCreationPage } from '../components/ProfileCreationPage';
 import { GameInterface } from '../components/GameInterface';
 import { SocketProvider } from '../context/SocketContext';
+import { useStarknetConnect } from '../dojo/hooks/useStarknetConnect';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('home');
   const [userProfile, setUserProfile] = useState<{ name: string; wallet: string; avatar: string } | null>(null);
+  const { status, handleConnect } = useStarknetConnect();
 
   // Check for existing profile on app load
   useEffect(() => {
@@ -29,13 +31,53 @@ function App() {
     setCurrentPage(page);
   };
 
-  const handleNavigateToGames = () => {
-    // Check if user has a profile before allowing access to games
-    if (userProfile) {
-      setCurrentPage('games');
-    } else {
-      setCurrentPage('createProfile');
+  const generateRandomProfile = () => {
+    const namePrefixes = [
+      'Pixel', 'Crypto', 'Byte', 'Zero', 'Neon', 'Cyber', 'Quantum', 'Matrix',
+      'Digital', 'Binary', 'Hex', 'Alpha', 'Beta', 'Gamma', 'Delta', 'Omega',
+      'Shadow', 'Ghost', 'Phoenix', 'Nova', 'Vortex', 'Nexus', 'Echo', 'Flux'
+    ];
+    
+    const nameSuffixes = [
+      'Player', 'Master', 'Hunter', 'Warrior', 'Guardian', 'Knight', 'Sage',
+      'Wizard', 'Hacker', 'Trader', 'Rebel', 'Hero', 'Legend', 'Champion',
+      'Fighter', 'Slayer', 'Ninja', 'Samurai', 'Pilot', 'Ranger', 'Scout'
+    ];
+    
+    const avatarEmojis = [
+      '🤖', '👾', '🎮', '⚡', '🔥', '💎', '🌟', '🚀', '🛡️', '⚔️',
+      '👑', '🎯', '🎲', '🔮', '💫', '🌈', '🎨', '🎭', '🎪', '🎊'
+    ];
+    
+    const prefix = namePrefixes[Math.floor(Math.random() * namePrefixes.length)];
+    const suffix = nameSuffixes[Math.floor(Math.random() * nameSuffixes.length)];
+    const number = Math.floor(Math.random() * 999) + 1;
+    const newName = `${prefix}${suffix}${number}`;
+    
+    // Generate a realistic looking wallet address
+    const chars = '0123456789abcdef';
+    let newWallet = '0x';
+    for (let i = 0; i < 40; i++) {
+      newWallet += chars[Math.floor(Math.random() * chars.length)];
     }
+    
+    const newAvatar = avatarEmojis[Math.floor(Math.random() * avatarEmojis.length)];
+    
+    return { name: newName, wallet: newWallet, avatar: newAvatar };
+  };
+
+  const handleNavigateToGames = async () => {
+    if (status !== 'connected') {
+      await handleConnect();
+    }
+
+    if (!userProfile) {
+      const profile = generateRandomProfile();
+      localStorage.setItem('userProfile', JSON.stringify(profile));
+      setUserProfile(profile);
+    }
+
+    setCurrentPage('games');
   };
 
   const handleProfileCreated = (profile: { name: string; wallet: string; avatar: string }) => {
@@ -44,6 +86,7 @@ function App() {
   };
 
   const handlePlayGame = () => {
+    // Navigate to game interface - it has its own validation and fallback mechanisms
     setCurrentPage('game');
   };
 

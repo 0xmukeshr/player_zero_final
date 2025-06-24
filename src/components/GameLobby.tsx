@@ -17,7 +17,7 @@ interface GameLobbyProps {
 }
 
 export function GameLobby({ onPlayGame }: GameLobbyProps) {
-  const { socket, connected, gameId, setGameInfo } = useSocket();
+  const { socket, connected, gameId, playerId, setGameInfo } = useSocket();
   const { playSound } = useAudio();
   
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -35,6 +35,7 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
   const [refreshingGames, setRefreshingGames] = useState(false);
   const [loading, setLoading] = useState(false);
   const [joiningGameId, setJoiningGameId] = useState<string | null>(null);
+  const [enteringGame, setEnteringGame] = useState(false);
 
   // Load user profile on mount
   useEffect(() => {
@@ -62,18 +63,36 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
     });
 
     socket.on('game-created', (data: { gameId: string; playerId: string }) => {
-      console.log('Game created event received:', data);
+      console.log('Game created event received in GameLobby:', data);
       setCreatedGameId(data.gameId);
       setShowGameCreated(true);
       setShowCreateModal(true);
       setLoading(false);
       setError('');
-      // Store game info in context with player name immediately
+      
+      // Immediately set the game info in context with the received player ID
       if (userProfile?.name) {
-        console.log('Setting game info in context:', { gameId: data.gameId, playerId: data.playerId, playerName: userProfile.name });
+        console.log('GameLobby: Setting game info immediately after creation:', {
+          gameId: data.gameId,
+          playerId: data.playerId,
+          playerName: userProfile.name
+        });
         setGameInfo(data.gameId, data.playerId, userProfile.name);
+        
+        // Also store in localStorage immediately with host flag
+        try {
+          const gameInfo = {
+            gameId: data.gameId,
+            playerId: data.playerId,
+            playerName: userProfile.name,
+            isCreator: true
+          };
+          localStorage.setItem('currentGameInfo', JSON.stringify(gameInfo));
+          console.log('GameLobby: Stored game info in localStorage immediately:', gameInfo);
+        } catch (error) {
+          console.error('GameLobby: Error storing game info:', error);
+        }
       }
-      // Don't automatically navigate to game, wait for user to click "Enter Game"
     });
 
     socket.on('game-joined', (data: { gameId: string; playerId: string }) => {
@@ -125,10 +144,13 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
       setLoading(true);
       setError('');
       
+      console.log('Creating game:', { gameName: gameName.trim(), playerName: userProfile.name, isPrivate, walletAddress: userProfile.wallet });
+      
       socket.emit('create-game', {
         gameName: gameName.trim(),
         playerName: userProfile.name,
-        isPrivate
+        isPrivate,
+        walletAddress: userProfile.wallet
       });
       
       // Don't close modal - wait for game created response
@@ -144,7 +166,8 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
       
       socket.emit('join-game', {
         gameId,
-        playerName: userProfile.name
+        playerName: userProfile.name,
+        walletAddress: userProfile.wallet
       });
     }
   };
@@ -158,7 +181,8 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
       
       socket.emit('join-game', {
         gameId: joinGameId.trim(),
-        playerName: userProfile.name
+        playerName: userProfile.name,
+        walletAddress: userProfile.wallet
       });
     }
   };
@@ -228,8 +252,8 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
     setError('');
   };
 
-  const handlePlayCreatedGame = () => {
-    console.log('Entering created game...', { createdGameId, connected, gameId });
+  const handlePlayCreatedGame = async () => {
+    console.log('Entering created game...', { createdGameId, connected, gameId, playerId });
     if (!connected) {
       setError('Not connected to server. Please wait for connection.');
       return;
@@ -239,8 +263,103 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
       return;
     }
     
-    console.log('Navigating to game interface with game ID:', createdGameId);
+    setEnteringGame(true);
+    
+    // Wait for game creation to complete and data to be available
+    let effectivePlayerId = playerId;
+    let effectivePlayerName = userProfile?.name;
+    let attempts = 0;
+    const maxAttempts = 10;
+    
+    // Poll for game info with timeout
+    while (attempts < maxAttempts) {
+      try {
+        // First check context values
+        if (gameId === createdGameId && playerId) {
+          effectivePlayerId = playerId;
+          effectivePlayerName = userProfile?.name;
+          console.log('Using game info from context:', {
+            gameId,
+            playerId: effectivePlayerId,
+            playerName: effectivePlayerName
+          });
+          break;
+        }
+        
+        // Then check localStorage
+        const storedGameInfo = localStorage.getItem('currentGameInfo');
+        console.log(`Attempt ${attempts + 1}: Checking localStorage for game info:`, storedGameInfo);
+        
+        if (storedGameInfo) {
+          const parsed = JSON.parse(storedGameInfo);
+          console.log('Parsed localStorage game info:', parsed);
+          
+          if (parsed.gameId === createdGameId && parsed.playerId) {
+            effectivePlayerId = parsed.playerId;
+            effectivePlayerName = parsed.playerName || userProfile?.name;
+            console.log('Using game info from localStorage:', {
+              gameId: parsed.gameId,
+              playerId: effectivePlayerId,
+              playerName: effectivePlayerName
+            });
+            break;
+          }
+        }
+        
+        // Wait 100ms before next attempt
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      } catch (error) {
+        console.error('Error reading game info:', error);
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    
+    // Ensure we have all required info before proceeding
+    if (!effectivePlayerId || !effectivePlayerName) {
+      console.error('Missing game information after polling:', {
+        effectivePlayerId,
+        effectivePlayerName,
+        createdGameId,
+        contextGameId: gameId,
+        contextPlayerId: playerId,
+        userProfileName: userProfile?.name,
+        attempts
+      });
+      setError(`Missing game information after ${attempts} attempts. Player ID: ${effectivePlayerId || 'missing'}, Player Name: ${effectivePlayerName || 'missing'}`);
+      setEnteringGame(false);
+      return;
+    }
+    
+    // Create complete game info object
+    const gameInfo = {
+      gameId: createdGameId,
+      playerId: effectivePlayerId,
+      playerName: effectivePlayerName,
+      isCreator: true
+    };
+    
+    console.log('Setting complete game info in both context and localStorage:', gameInfo);
+    
+    // Set the game info in context
+    setGameInfo(createdGameId, effectivePlayerId, effectivePlayerName);
+    
+    // Ensure localStorage is updated with complete info
+    try {
+      localStorage.setItem('currentGameInfo', JSON.stringify(gameInfo));
+      console.log('Complete game info stored in localStorage:', gameInfo);
+    } catch (error) {
+      console.error('Error storing game info:', error);
+    }
+    
+    console.log('Navigating to game interface with complete info');
+    
+    // Close modal first
     handleCloseCreateModal();
+    
+    // Navigate immediately - context should be set synchronously
+    setEnteringGame(false);
     onPlayGame();
   };
 
@@ -510,9 +629,10 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
                       playSound('click');
                       handlePlayCreatedGame();
                     }}
-                    className="flex-1 px-6 py-3 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-base pixel-btn border-pixel-black uppercase tracking-wider"
+                    disabled={enteringGame}
+                    className="flex-1 px-6 py-3 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-base pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Enter Game
+                    {enteringGame ? 'Entering...' : 'Enter Game'}
                   </button>
                   <button
                     onClick={() => {

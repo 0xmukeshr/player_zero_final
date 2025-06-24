@@ -54,16 +54,32 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
         const { gameId: storedGameId, playerId: storedPlayerId, playerName: storedPlayerName } = JSON.parse(storedGameInfo);
         console.log('GameInterface: Using stored game info:', { storedGameId, storedPlayerId, storedPlayerName });
         
-        if (storedGameId && storedPlayerId && storedPlayerName) {
+        if (storedGameId && storedPlayerId) {
           setEffectiveGameId(storedGameId);
           setEffectivePlayerId(storedPlayerId);
-          setEffectivePlayerName(storedPlayerName);
+          setEffectivePlayerName(storedPlayerName || 'Unknown Player');
           setContextLoaded(true);
           return;
         }
       }
     } catch (error) {
       console.error('GameInterface: Error loading stored game info:', error);
+    }
+    
+    // If still no game info found, try to get from user profile and check for recently created games
+    try {
+      const userProfile = localStorage.getItem('userProfile');
+      if (userProfile) {
+        const profile = JSON.parse(userProfile);
+        console.log('GameInterface: User profile found:', profile.name);
+        
+        // Set at least the player name if we have it
+        if (profile.name) {
+          setEffectivePlayerName(profile.name);
+        }
+      }
+    } catch (error) {
+      console.error('GameInterface: Error loading user profile:', error);
     }
     
     // Mark as loaded even if no values found to avoid infinite loading
@@ -308,17 +324,30 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
     }
   }, [gameState, effectivePlayerId]);
   
-  // Separate effect to update isHost when player or host changes
+  // Clean host detection - simple and reliable
   useEffect(() => {
-    if (gameState && effectivePlayerId) {
-      const newIsHost = gameState.host === effectivePlayerId;
-      console.log('GameInterface: Updating isHost:', {
-        effectivePlayerId,
-        gameStateHost: gameState.host,
-        newIsHost,
-        currentIsHost: isHost
+    if (!gameState || !effectivePlayerId) {
+      console.log('GameInterface: Host detection skipped - missing data:', {
+        hasGameState: !!gameState,
+        effectivePlayerId
       });
-      setIsHost(newIsHost);
+      return;
+    }
+
+    // Simple host check: are you the host according to gameState?
+    const amHost = gameState.host === effectivePlayerId;
+    console.log('GameInterface: Host detection check:', {
+      gameStateHost: gameState.host,
+      effectivePlayerId,
+      amHost,
+      previousIsHost: isHost
+    });
+    
+    setIsHost(amHost);
+    
+    // Additional debugging
+    if (amHost !== isHost) {
+      console.log('GameInterface: Host status changed from', isHost, 'to', amHost);
     }
   }, [gameState?.host, effectivePlayerId]);
   
@@ -526,17 +555,22 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
   if (!contextLoaded || !connected || !gameState) {
     let loadingMessage = 'Loading Game...';
     let showRetryButton = false;
+    let showExitButton = true;
     
     if (!contextLoaded) {
       loadingMessage = 'Initializing...';
+      showExitButton = false;
     } else if (!connected) {
       loadingMessage = 'Connecting to server...';
+      showExitButton = false;
     } else if (!effectiveGameId) {
       loadingMessage = 'No game selected...';
-      showRetryButton = true;
+      showRetryButton = false;
+      showExitButton = true;
     } else if (!gameState) {
       loadingMessage = 'Loading Game State...';
       showRetryButton = true;
+      showExitButton = true;
     }
     
     console.log('GameInterface Loading State:', {
@@ -544,7 +578,11 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
       connected,
       effectiveGameId,
       gameState: !!gameState,
-      loadingMessage
+      loadingMessage,
+      localStorageGameInfo: localStorage.getItem('currentGameInfo'),
+      contextGameId: gameId,
+      contextPlayerId: playerId,
+      contextPlayerName: playerName
     });
     
     return (
@@ -671,7 +709,8 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
             </div>
           </div>
 
-          {/* Start Game Button */}
+
+          {/* Start Game Button - Show ONLY for host */}
           {isHost && (
             <div className="text-center">
               <button
@@ -679,6 +718,8 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
                   console.log('Start Game button clicked:', {
                     playerCount: gameState.players.length,
                     isHost,
+                    hostId: gameState.host,
+                    playerId: effectivePlayerId,
                     status: gameState.status
                   });
                   playSound('click');
@@ -692,12 +733,24 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
               <p className="text-pixel-base-gray text-pixel-xs mt-2">
                 Minimum 2 players required to start
               </p>
-              <p className="text-pixel-base-gray text-pixel-xs mt-1">
-                Debug: Players: {gameState.players.length}, IsHost: {isHost.toString()}, Status: {gameState.status}
+              <p className="text-pixel-success text-pixel-xs mt-1">
+                You are the host - you can start the game when ready
               </p>
-              <p className="text-pixel-base-gray text-pixel-xs mt-1">
-                Debug IDs: Player: {effectivePlayerId}, Host: {gameState.host}, Match: {(effectivePlayerId === gameState.host).toString()}
-              </p>
+            </div>
+          )}
+          
+          {/* Waiting for Host Message */}
+          {!isHost && (
+            <div className="text-center">
+              <div className="bg-pixel-warning pixel-panel border-pixel-black p-4">
+                <p className="text-pixel-black font-bold">Waiting for host to start the game...</p>
+                <p className="text-pixel-black text-pixel-xs mt-1">
+                  Host: {gameState.players.find(p => p.id === gameState.host)?.name || 'Unknown'}
+                </p>
+                <p className="text-pixel-black text-pixel-xs mt-1">
+                  Only the host can start the game
+                </p>
+              </div>
             </div>
           )}
 
