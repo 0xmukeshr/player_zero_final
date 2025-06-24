@@ -15,12 +15,13 @@ interface UsePlayerReturn {
   refetchInventory: () => Promise<void>;
 }
 
+
 // Constants
 const TORII_URL = dojoConfig.toriiUrl + "/graphql";
 
 // GraphQL Queries
 const PLAYER_QUERY = `
-    query GetPlayer($playerAddress: ContractAddress!) {
+    query GetPlayerAndInventory($playerAddress: ContractAddress!) {
         playerzeroPlayerModels(where: { address: $playerAddress }) {
             edges {
                 node {

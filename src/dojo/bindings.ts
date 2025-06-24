@@ -30,7 +30,7 @@ export interface AssetStats {
 
 // Type definition for `playerzero::models::Game` struct
 export interface Game {
-	id: BigNumberish;
+	id: string;
 	round: BigNumberish;
 	is_active: boolean;
 	max_rounds: BigNumberish;
@@ -263,7 +263,7 @@ export const schema: SchemaType = {
 			sabotaged: 0,
 		},
 		Game: {
-			id: 0,
+			id: "0",
 			round: 0,
 			is_active: false,
 			max_rounds: 0,

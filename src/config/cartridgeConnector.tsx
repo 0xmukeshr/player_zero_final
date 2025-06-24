@@ -46,10 +46,15 @@ const policies = {
   contracts: {
     [CONTRACT_ADDRESS_GAME]: {
       methods: [
-        { name: "spawn_player", entrypoint: "spawn_player" },
-        { name: "train", entrypoint: "train" },
-        { name: "mine", entrypoint: "mine" },
-        { name: "rest", entrypoint: "rest" },
+        { name: "start_game", entrypoint: "start_game" },
+        { name: "join_game", entrypoint: "join_game" },
+        { name: "create_game", entrypoint: "create_game" },
+        { name: "buy_asset", entrypoint: "buy_asset" },
+        { name: "sell_asset", entrypoint: "sell_asset" },
+        { name: "burn_asset", entrypoint: "burn_asset" },
+        { name: "sabotage_player", entrypoint: "sabotage_player" },
+        { name: "next_round", entrypoint: "next_round" },
+        
       ],
     },
   },
@@ -59,8 +64,8 @@ const options: ControllerOptions = {
   chains: [{ rpcUrl: getRpcUrl() }],
   defaultChainId: getDefaultChainId(),
   policies,
-  namespace: "full_starter_react",
-  slot: "full-starter-react",
+  namespace: "playerzero",
+  slot: "playerzero",
 };
 
 const cartridgeConnector = new ControllerConnector(

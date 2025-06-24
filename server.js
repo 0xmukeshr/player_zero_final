@@ -101,8 +101,8 @@ io.on('connection', (socket) => {
   // Create a new game
   socket.on('create-game', async (data) => {
     try {
-      const { gameName, playerName, isPrivate, walletAddress } = data;
-      const gameId = generateGameId();
+      const { gameName,gameId, playerName, isPrivate, walletAddress } = data;
+      
       const playerId = generatePlayerId();
       
       console.log(`🎮 Creating game with host wallet: ${walletAddress}`);

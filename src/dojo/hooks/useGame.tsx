@@ -43,6 +43,8 @@ interface TransactionReceipt {
 const extractGameIdFromReceipt = (receipt: TransactionReceipt): BigNumberish | null => {
   try {
     // Look for GameCreated or GameStarted events
+    console.log("Receipt:", receipt);
+    
     const gameEvents = receipt.events?.filter(event => 
       event.keys.some(key => key.includes('GameCreated') || key.includes('GameStarted'))
     );
@@ -217,16 +219,22 @@ export const useGame = () => {
    * Creates a new game
    */
   const createGame = useCallback(async (maxRounds: BigNumberish): Promise<GameActionResponse> => {
+
+
+    console.log("🎮 Creating new game with max rounds:", maxRounds);
     // Prevent concurrent processing
-    if (gameState.isProcessing) {
-      return { success: false, error: "Already processing a game action" };
-    }
+    // if (gameState.isProcessing) {
+    //   return { success: false, error: "Already processing a game action" };
+    // }
 
     // Validation
-    const validationError = validateGameAction(status, account, player);
-    if (validationError) {
-      return { success: false, error: validationError };
-    }
+    if (status !== "connected") {
+     new Error("Controller not connected. Please connect your controller first.");
+  }
+  
+  if (!account) {
+    new Error( "No account found. Please connect your controller.");
+  }
 
     const transactionId = uuidv4();
     transactionIdRef.current = transactionId;
@@ -241,7 +249,7 @@ export const useGame = () => {
         retryCount: 0
       }));
 
-      console.log("🎮 Creating new game with max rounds:", maxRounds);
+      
 
       // Execute transaction
       const { success, txResponse, error } = await executeTransaction(
@@ -259,27 +267,26 @@ export const useGame = () => {
 
       // Wait for transaction confirmation
       if (txResponse.transaction_hash) {
-        const receipt = await waitForTransactionConfirmation(txResponse.transaction_hash);
+        const receipt = await (account as Account).waitForTransaction(txResponse.transaction_hash);
         
         if (receipt) {
-          // Extract game ID from receipt
-          const gameId = extractGameIdFromReceipt(receipt);
+          const gameId:string= await receipt.value.events[0].data[1];
+          console.log("Game created with ID:" ,gameId);
           
-          if (gameId) {
             // Update store with new game
             setCurrentGame({
               id: gameId,
               round: 0,
-              is_active: false, // Game created but not started yet
+              is_active: true,  
               max_rounds: maxRounds,
               num_players: 1
             });
             
-            console.log("✅ Game created with ID:", gameId);
+            
           } else {
             console.warn("⚠️ Game created but couldn't extract game ID from receipt");
           }
-        }
+        
       }
 
       // Confirm transaction and update state

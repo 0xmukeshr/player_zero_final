@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAudio } from '../hooks/useAudio';
+import { useGame } from '../dojo/hooks/useGame'; 
+import useAppStore from '../zustand/store';
 
 interface PublicGame {
   id: string;
@@ -37,6 +39,8 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
   const [joiningGameId, setJoiningGameId] = useState<string | null>(null);
   const [enteringGame, setEnteringGame] = useState(false);
 
+  const {player,currentGame}=useAppStore();
+  const {createGame} = useGame();
   // Load user profile on mount
   useEffect(() => {
     const existingProfile = localStorage.getItem('userProfile');
@@ -139,23 +143,23 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
     socket.emit('get-public-games');
   };
 
-  const handleCreateGame = () => {
-    if (gameName.trim() && userProfile?.name && socket && connected) {
-      setLoading(true);
+  const handleCreateGame =async () => {
+       setLoading(true);
       setError('');
+    console.log("🎮 Creating new game with max rounds:");
+    const response= await createGame(20);
+    if(response.success){
+      console.log("Gameid in client",currentGame?.id);
       
-      console.log('Creating game:', { gameName: gameName.trim(), playerName: userProfile.name, isPrivate, walletAddress: userProfile.wallet });
-      
-      socket.emit('create-game', {
+ socket?.emit('create-game', {
         gameName: gameName.trim(),
-        playerName: userProfile.name,
+        gameId:currentGame?.id,
+        playerName: player?.name,
         isPrivate,
-        walletAddress: userProfile.wallet
+        walletAddress: player?.address
       });
-      
-      // Don't close modal - wait for game created response
-      // Modal will show game ID after creation
     }
+    
   };
 
   const handleJoinPublicGame = (gameId: string, gameName?: string) => {
