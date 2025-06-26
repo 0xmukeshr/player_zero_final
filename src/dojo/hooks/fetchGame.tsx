@@ -9,15 +9,7 @@ interface UseGameReturn {
   game: Game | null;
   isLoading: boolean;
   error: Error | null;
-  refetch: () => Promise<void>;
-}
-
-interface UseGameDataOptions {
-  enabled?: boolean;
-  refetchInterval?: number;
-  refetchOnWindowFocus?: boolean;
-  refetchOnMount?: boolean;
-  refetchOnReconnect?: boolean;
+  refetch: (gameId?: string) => Promise<void>;
 }
 
 // Constants
@@ -55,10 +47,10 @@ const toBigNumberish = (value: string | number): string => {
   return "0";
 };
 
-// Function to fetch game and market data from GraphQL
+// Function to fetch game data from GraphQL
 const fetchGameData = async (gameId: string): Promise<{ game: Game | null}> => {
   try {
-    console.log("🔍 Fetching game and market data for game:", gameId);
+    console.log("🔍 Fetching game data for game:", gameId);
 
     const response = await fetch(TORII_URL, {
       method: "POST",
@@ -70,7 +62,7 @@ const fetchGameData = async (gameId: string): Promise<{ game: Game | null}> => {
     });
 
     const result = await response.json();
-    console.log("📡 Game/Market GraphQL response:", result);
+    console.log("📡 Game GraphQL response:", result);
 
     let gameData: Game | null = null;
 
@@ -95,46 +87,44 @@ const fetchGameData = async (gameId: string): Promise<{ game: Game | null}> => {
     return { game: gameData};
     
   } catch (error) {
-    console.error("❌ Error fetching game/market data:", error);
+    console.error("❌ Error fetching game data:", error);
     throw error;
   }
 };
 
-// Main hook with fixed dependency issues
-export const UseGameData = (): UseGameReturn => {
- 
-
+// Main hook with manual gameId support
+export const UseGameData = (gameId?: string): UseGameReturn => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
- 
   
   // CRITICAL FIX: Use separate selectors to avoid circular dependencies
   const currentGame = useAppStore(state => state.currentGame);
   const setCurrentGame = useAppStore(state => state.setCurrentGame);
   const updateGameRound = useAppStore(state => state.updateGameRound);
-const targetGameId = currentGame?.id;
- 
+
+  // Use provided gameId or current game's id
+  const activeGameId = useMemo(() => {
+    return gameId || currentGame?.id;
+  }, [gameId, currentGame?.id]);
+
   const isFetchingRef = useRef<boolean>(false); 
  
   // Memoize the refetch function to prevent recreation on every render
-  const refetch = useCallback(async () => {
-    const targetGameId = currentGame?.id;
+  const refetch = useCallback(async (manualGameId?: string) => {
+    const targetGameId = manualGameId || activeGameId;
     
     if (!targetGameId) {
       console.log("❌ No game ID available for fetch");
       setIsLoading(false);
       return;
     }
- 
-  
 
     try {
- 
       setIsLoading(true);
       setError(null);
 
       const { game } = await fetchGameData(targetGameId);
-      console.log("🎮💰 Game and market data fetched:", { game });
+      console.log("🎮 Game data fetched:", { game });
 
       // Update game data in store only if it's different
       if (game) {
@@ -171,16 +161,21 @@ const targetGameId = currentGame?.id;
 
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error occurred');
-      console.error("❌ Error in game/market refetch:", error);
+      console.error("❌ Error in game refetch:", error);
       setError(error);
     } finally {
       setIsLoading(false);
       isFetchingRef.current = false;
     }
-  }, [targetGameId, setCurrentGame, updateGameRound]);
+  }, [activeGameId, setCurrentGame, updateGameRound]);
 
- 
-   
+  // Auto-fetch when gameId changes (only if no manual gameId provided)
+  useEffect(() => {
+    if (activeGameId && !gameId) {
+      console.log("🔄 Game ID changed, refetching game data");
+      refetch();
+    }
+  }, [activeGameId, refetch, gameId]);
 
   return {
     game: currentGame,

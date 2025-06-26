@@ -40,34 +40,6 @@ interface TransactionReceipt {
   [key: string]: any;
 }
 
-// Utility function to extract game ID from transaction receipt
-const extractGameIdFromReceipt = (receipt: TransactionReceipt): BigNumberish | null => {
-  try {
-    // Look for GameCreated or GameStarted events
-    console.log("Receipt:", receipt);
-    
-    const gameEvents = receipt.events?.filter(event => 
-      event.keys.some(key => key.includes('GameCreated') || key.includes('GameStarted'))
-    );
-    
-    if (gameEvents && gameEvents.length > 0) {
-      // Game ID is typically the first data element
-      const gameId = gameEvents[0].data[0];
-      return gameId ? BigInt(gameId) : null;
-    }
-    
-    // Fallback: try to extract from receipt value
-    if (receipt.value && typeof receipt.value === 'string') {
-      return BigInt(receipt.value);
-    }
-    
-    return null;
-  } catch (error) {
-    console.warn("Failed to extract game ID from receipt:", error);
-    return null;
-  }
-};
-
 // Validation helper
 const validateGameAction = (status: string, account: any, player: any): string | null => {
   if (status !== "connected") {
@@ -102,7 +74,8 @@ export const useGame = () => {
     startGame: setGameStarted,
     endGame 
   } = useAppStore();
-const {refetch:fetchGameData}=UseGameData()
+  const { refetch: fetchGameData } = UseGameData();
+
   // Refs for cleanup
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const transactionIdRef = useRef<string | null>(null);
@@ -224,22 +197,16 @@ const {refetch:fetchGameData}=UseGameData()
    * Creates a new game
    */
   const createGame = useCallback(async (maxRounds: BigNumberish): Promise<GameActionResponse> => {
-
-
     console.log("🎮 Creating new game with max rounds:", maxRounds);
-    // Prevent concurrent processing
-    // if (gameState.isProcessing) {
-    //   return { success: false, error: "Already processing a game action" };
-    // }
 
     // Validation
     if (status !== "connected") {
-     new Error("Controller not connected. Please connect your controller first.");
-  }
+      throw new Error("Controller not connected. Please connect your controller first.");
+    }
   
-  if (!account) {
-    new Error( "No account found. Please connect your controller.");
-  }
+    if (!account) {
+      throw new Error("No account found. Please connect your controller.");
+    }
 
     const transactionId = uuidv4();
     transactionIdRef.current = transactionId;
@@ -253,8 +220,6 @@ const {refetch:fetchGameData}=UseGameData()
         completed: false,
         retryCount: 0
       }));
-
-      
 
       // Execute transaction
       const { success, txResponse, error } = await executeTransaction(
@@ -275,24 +240,20 @@ const {refetch:fetchGameData}=UseGameData()
         const receipt = await (account as Account).waitForTransaction(txResponse.transaction_hash);
         
         if (receipt) {
-          const gameId:string= await receipt.value.events[0].data[1];
-          console.log("Game created with ID:" ,gameId);
+          const gameId: string = await receipt.value.events[0].data[1];
+          console.log("Game created with ID:", gameId);
           
-            // Update store with new game
-            setCurrentGame({
-              id: gameId,
-              round: 0,
-              is_active: true,  
-              max_rounds: maxRounds,
-              num_players: 1
-            });
-            console.log(currentGame);
-            
-            
-          } else {
-            console.warn("⚠️ Game created but couldn't extract game ID from receipt");
-          }
-        
+          // Set the created game as current game with basic info
+          setCurrentGame({
+            id: gameId,
+            round: "0",
+            is_active: false,
+            max_rounds: maxRounds.toString(),
+            num_players: "1"
+          });
+        } else {
+          console.warn("⚠️ Game created but couldn't get receipt");
+        }
       }
 
       // Confirm transaction and update state
@@ -314,20 +275,15 @@ const {refetch:fetchGameData}=UseGameData()
     } catch (error) {
       return handleError(error, "Failed to create game. Please try again.", transactionId);
     }
-  }, [status, account, player, gameState.isProcessing, client.actions, dojoState, executeTransaction, waitForTransactionConfirmation, handleError, setCurrentGame]);
+  }, [status, account, client.actions, dojoState, executeTransaction, handleError]);
 
   /**
-   * Joins an existing game
+   * Joins an existing game and sets it as current game
    */
   const joinGame = useCallback(async (gameId: string, playerName: string): Promise<GameActionResponse> => {
     if (gameState.isProcessing) {
       return { success: false, error: "Already processing a game action" };
     }
-
-    // const validationError = validateGameAction(status, account, player);
-    // if (validationError) {
-    //   return { success: false, error: validationError };
-    // }
 
     const transactionId = uuidv4();
     transactionIdRef.current = transactionId;
@@ -363,20 +319,21 @@ const {refetch:fetchGameData}=UseGameData()
         await waitForTransactionConfirmation(txResponse.transaction_hash);
       }
 
-      // Update current game state
-      if (currentGame && currentGame.id === gameId) {
-        setCurrentGame({
-          ...currentGame,
-          num_players: typeof currentGame.num_players === 'number' 
-            ? currentGame.num_players + 1 
-            : Number(currentGame.num_players) + 1
-        });
-      }
+      // Fetch fresh game data and set as current game
+      console.log("🔄 Fetching game data to set as current game...");
+      
+      // Temporarily set the game ID to fetch data
+      const tempGame = { id: gameId, round: "0", is_active: false, max_rounds: "0", num_players: "0" };
+      setCurrentGame(tempGame);
+      
+      // Now fetch the complete game data
+      await fetchGameData(gameId);
+      console.log("✅ Game data fetched and set as current game");
 
       // Confirm transaction
       dojoState.confirmTransaction(transactionId);
       transactionIdRef.current = null;
-      await fetchGameData()
+
       setGameState(prev => ({
         ...prev,
         completed: true,
@@ -393,23 +350,20 @@ const {refetch:fetchGameData}=UseGameData()
     } catch (error) {
       return handleError(error, "Failed to join game. Please try again.", transactionId);
     }
-  }, [status, account, player, gameState.isProcessing, client.actions, dojoState, executeTransaction, waitForTransactionConfirmation, handleError, currentGame, setCurrentGame]);
+  }, [gameState.isProcessing, client.actions, dojoState, executeTransaction, waitForTransactionConfirmation, handleError, setCurrentGame, fetchGameData]);
 
   /**
    * Starts an existing game
    */
   const startGame = useCallback(async (gameId: string): Promise<GameActionResponse> => {
-   
     if (gameState.isProcessing) {
       return { success: false, error: "Already processing a game action" };
     }
- 
 
     const validationError = validateGameAction(status, account, player);
     if (validationError) {
       return { success: false, error: validationError };
     }
-  
 
     const transactionId = uuidv4();
     transactionIdRef.current = transactionId;
@@ -432,6 +386,7 @@ const {refetch:fetchGameData}=UseGameData()
         'starting',
         'Game started'
       ); 
+      
       if (!success || !txResponse) {
         return handleError(new Error(error || 'Transaction failed'), "Failed to start game", transactionId);
       }

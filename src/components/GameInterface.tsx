@@ -63,14 +63,14 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
   async function updateGamedata() {
     console.log("updating gamedata");
 
-    await fetchGameData();
+    await fetchGameData(currentGame?.id);
     console.log("gamedata updated");
   }
 
   async function updateMarketdata() {
     console.log("updating Market data");
 
-    await fetchMarketData();
+    await fetchMarketData(currentGame?.id);
     console.log("Market data updated");
   }
   // Socket event listeners

@@ -9,7 +9,7 @@ interface UseMarketReturn {
   market: Market | null;
   isLoading: boolean;
   error: Error | null;
-  refetch: () => Promise<void>;
+  refetch: (gameId?: string) => Promise<void>;
 }
 
 // Constants
@@ -127,7 +127,7 @@ const fetchMarketData = async (gameId: string): Promise<Market | null> => {
 };
 
 // Main hook
-export const useMarket = (gameId?: BigNumberish): UseMarketReturn => {
+export const useMarket = (gameId?: string): UseMarketReturn => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const { account } = useAccount();
@@ -138,11 +138,13 @@ export const useMarket = (gameId?: BigNumberish): UseMarketReturn => {
 
   // Use provided gameId or current game's id
   const activeGameId = useMemo(() => {
-    return currentGame?.id;
+    return gameId || currentGame?.id;
   }, [gameId, currentGame?.id]);
 
-  const refetch = useCallback(async () => {
-    if (!activeGameId) {
+  const refetch = useCallback(async (manualGameId?: string) => {
+    const targetGameId = manualGameId || activeGameId;
+    
+    if (!targetGameId) {
       console.log("❌ No game ID available for market fetch");
       setIsLoading(false);
       return;
@@ -152,7 +154,7 @@ export const useMarket = (gameId?: BigNumberish): UseMarketReturn => {
       setIsLoading(true);
       setError(null);
 
-      const marketData = await fetchMarketData(activeGameId);
+      const marketData = await fetchMarketData(targetGameId);
       console.log("💰 Market data fetched:", marketData);
 
       setMarket(marketData);
@@ -170,13 +172,13 @@ export const useMarket = (gameId?: BigNumberish): UseMarketReturn => {
     }
   }, [activeGameId, setMarket]);
 
-  // Auto-fetch when gameId changes
+  // Auto-fetch when gameId changes (only if no manual gameId provided)
   useEffect(() => {
-    if (activeGameId) {
+    if (activeGameId && !gameId) {
       console.log("🔄 Game ID changed, refetching market data");
       refetch();
     }
-  }, [activeGameId, refetch]);
+  }, [activeGameId, refetch, gameId]);
 
   // Clear market when no account
   useEffect(() => {
@@ -188,15 +190,15 @@ export const useMarket = (gameId?: BigNumberish): UseMarketReturn => {
     }
   }, [account, setMarket]);
 
-  // Clear market when no game
+  // Clear market when no game and no manual gameId
   useEffect(() => {
-    if (!currentGame) {
+    if (!currentGame && !gameId) {
       console.log("❌ No current game, clearing market data");
       setMarket(null);
       setError(null);
       setIsLoading(false);
     }
-  }, [currentGame, setMarket]);
+  }, [currentGame, setMarket, gameId]);
 
   return {
     market: storeMarket,
