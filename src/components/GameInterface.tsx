@@ -54,6 +54,7 @@ const {refetch:fetchGameData}=UseGameData()
   const [isHost, setIsHost] = useState(false);
   const [notifications, setNotifications] = useState<string[]>([]);
   const [targetPlayer, setTargetPlayer] = useState<string>('');
+  const [gameIdCopied, setGameIdCopied] = useState(false);
 
   async function updateGamedata() {
     console.log("updating gamedata");
@@ -81,12 +82,12 @@ const {refetch:fetchGameData}=UseGameData()
     socket.on('game-started',async () => {
       await updateGamedata;
       playSound('switch');
-      addNotification('🎮 Game started!');
+      addNotification('Game started!');
     });
 
     socket.on('game-finished', () => {
       playSound('action');
-      addNotification('🏁 Game finished!');
+      addNotification('Game finished!');
     });
 
     return () => {
@@ -108,7 +109,7 @@ const {refetch:fetchGameData}=UseGameData()
   // Handle game action errors
   useEffect(() => {
     if (gameActionError) {
-      addNotification(`❌ ${gameActionError}`);
+      addNotification(`Error: ${gameActionError}`);
     }
   }, [gameActionError]);
 
@@ -125,7 +126,7 @@ const {refetch:fetchGameData}=UseGameData()
     try {
       
       
-      addNotification('🚀 Starting game on blockchain...',);
+      addNotification('Starting game on blockchain...');
       
       // Start game on blockchain first
       const result = await startGame(currentGame?.id!);
@@ -133,14 +134,14 @@ const {refetch:fetchGameData}=UseGameData()
       if (result.success) {
         // Then emit to socket for real-time updates
         socket?.emit('start-game');
-        addNotification('✅ Game started successfully!');
+        addNotification('Game started successfully!');
         playSound('switch');
       } else {
-        addNotification(`❌ Failed to start game: ${result.error}`);
+        addNotification(`Failed to start game: ${result.error}`);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      addNotification(`❌ Failed to start game: ${errorMessage}`);
+      addNotification(`Failed to start game: ${errorMessage}`);
     }
   };
 
@@ -169,12 +170,12 @@ const {refetch:fetchGameData}=UseGameData()
       );
 
       if (result.success) {
-        addNotification(`✅ ${selectedAction} ${selectedAsset} successful!`);
+        addNotification(`${selectedAction} ${selectedAsset} successful!`);
       } else {
-        addNotification(`❌ ${selectedAction} failed: ${result.error}`);
+        addNotification(`${selectedAction} failed: ${result.error}`);
       }
     } catch (error) {
-      addNotification(`❌ Action failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addNotification(`Action failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
     // Reset target player
@@ -235,29 +236,81 @@ const {refetch:fetchGameData}=UseGameData()
 
   // Waiting room
   if (!gameStarted) {
+    const handleCopyGameId = async () => {
+      if (gameId) {
+        try {
+          await navigator.clipboard.writeText(gameId);
+          setGameIdCopied(true);
+          addNotification('Game ID copied to clipboard!');
+          
+          // Reset the copied state after 2 seconds
+          setTimeout(() => {
+            setGameIdCopied(false);
+          }, 2000);
+        } catch (err) {
+          console.error('Failed to copy game ID:', err);
+          addNotification('Failed to copy Game ID');
+        }
+      } else {
+        addNotification('No Game ID to copy');
+      }
+    };
+
     return (
-      <div className="min-h-screen bg-pixel-black p-6">
+      <div className="min-h-screen bg-pixel-black scanlines p-6 font-pixel">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-pixel-2xl font-bold text-pixel-primary">
+            <h1 className="text-pixel-2xl font-bold text-pixel-primary uppercase tracking-wider">
               Waiting Room
             </h1>
             <button
               onClick={handleExitGame}
-              className="px-4 py-2 bg-pixel-error hover:bg-pixel-warning text-pixel-black font-bold pixel-btn"
+              className="px-4 py-2 bg-pixel-error hover:bg-pixel-warning text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider"
             >
               Exit Game
             </button>
           </div>
 
-          {/* Game Info */}
-          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6 mb-6">
-            <h3 className="text-pixel-lg font-bold text-pixel-primary mb-4">Game Info</h3>
-            <div className="space-y-2 text-pixel-base-gray">
-              <p><span className="text-pixel-primary">Game ID:</span> {gameId}</p>
-              <p><span className="text-pixel-primary">Host:</span> {isHost ? 'You' : gameState.players?.find((p: any) => p.id === gameState.host)?.name || 'Unknown'}</p>
-              <p><span className="text-pixel-primary">Players:</span> {gameState.players?.length || 0}/4</p>
+          {/* Game Info - Split into two halves */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* Left Half - Game Details */}
+            <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-pixel-lg font-bold text-pixel-primary">Game Info</h3>
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-pixel-success pixel-notification border-pixel-success" title="Live Sync Active"></div>
+                  <span className="text-pixel-xs text-pixel-success font-bold">LIVE</span>
+                </div>
+              </div>
+              <div className="space-y-2 text-pixel-base-gray">
+                <p><span className="text-pixel-primary">Game Name:</span> {gameState?.gameName || 'Unnamed Game'}</p>
+                <p><span className="text-pixel-primary">Game ID:</span> {gameId}</p>
+                <p><span className="text-pixel-primary">Host:</span> {isHost ? 'You' : gameState?.players?.find((p: any) => p.id === gameState.host)?.name || 'Unknown'}</p>
+                <p><span className="text-pixel-primary">Players:</span> {gameState?.players?.length || 0}/4</p>
+                <p><span className="text-pixel-primary">Status:</span> Waiting for players</p>
+              </div>
+            </div>
+
+            {/* Right Half - How to Invite */}
+            <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6">
+              <h3 className="text-pixel-lg font-bold text-pixel-primary mb-4">How to Invite</h3>
+              <div className="space-y-2 text-pixel-base-gray text-pixel-sm">
+                <p>1. Share the Game ID with friends</p>
+                <p>2. They join using "Join by ID"</p>
+                <p>3. Host starts the game when ready</p>
+              </div>
+              <button
+                onClick={handleCopyGameId}
+                disabled={gameIdCopied}
+                className={`mt-4 w-full px-4 py-2 font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider transition-colors ${
+                  gameIdCopied 
+                    ? 'bg-pixel-success text-pixel-black' 
+                    : 'bg-pixel-accent hover:bg-pixel-success text-pixel-black'
+                }`}
+              >
+                {gameIdCopied ? 'Copied!' : 'Copy Game ID'}
+              </button>
             </div>
           </div>
 
@@ -396,7 +449,7 @@ const {refetch:fetchGameData}=UseGameData()
                   {gameActionProcessing ? 'Blockchain Processing...' : 'Processing...'}
                 </div>
                 <div className="text-pixel-xs text-pixel-warning">
-                  ⏳ {gameActionProcessing ? 'Transaction in progress' : 'Action in progress'}
+                  {gameActionProcessing ? 'Transaction in progress' : 'Action in progress'}
                 </div>
               </div>
             )}

@@ -92,7 +92,7 @@ export function PlayerStats({ players }: PlayerStatsProps) {
 
                 {/* Total Points */}
                 <div className={`font-bold text-pixel-xs ${getRankColor(index)}`}>
-                  {Math.floor(totalPoints/100)}K
+                  {totalPoints}
                 </div>
               </div>
             </div>

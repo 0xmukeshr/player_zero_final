@@ -23,26 +23,54 @@ export type {
 export type AssetType = 'Gold' | 'Water' | 'Oil';
 export type ActionType = 'Buy' | 'Sell' | 'Burn' | 'Sabotage';
 
+// Proper types for game state
+interface GameState {
+  id: string;
+  players: any[];
+  currentRound: number;
+  status: 'waiting' | 'playing' | 'finished';
+  market: any;
+}
+
+interface CurrentPlayer {
+  id: string;
+  name: string;
+  balance: number;
+  assets: Record<AssetType, number>;
+}
+
 // Utility functions for type conversion
 export const AssetTypeUtils = {
   // Convert string to CairoCustomEnum
   toCairoEnum: (asset: AssetType): CairoCustomEnum => {
-    switch (asset) {
-      case 'Gold':
-        return new CairoCustomEnum({ Gold: "", Water: undefined, Oil: undefined });
-      case 'Water':
-        return new CairoCustomEnum({ Gold: undefined, Water: "", Oil: undefined });
-      case 'Oil':
-        return new CairoCustomEnum({ Gold: undefined, Water: undefined, Oil: "" });
+    try {
+      switch (asset) {
+        case 'Gold':
+          return new CairoCustomEnum({ Gold: "", Water: undefined, Oil: undefined });
+        case 'Water':
+          return new CairoCustomEnum({ Gold: undefined, Water: "", Oil: undefined });
+        case 'Oil':
+          return new CairoCustomEnum({ Gold: undefined, Water: undefined, Oil: "" });
+        default:
+          throw new Error(`Invalid asset type: ${asset}`);
+      }
+    } catch (error) {
+      console.error('Error converting asset to Cairo enum:', error);
+      throw error;
     }
   },
 
   // Convert CairoCustomEnum to string
   fromCairoEnum: (cairoEnum: CairoCustomEnum): AssetType => {
-    if (cairoEnum.variant.Gold !== undefined) return 'Gold';
-    if (cairoEnum.variant.Water !== undefined) return 'Water';
-    if (cairoEnum.variant.Oil !== undefined) return 'Oil';
-    throw new Error('Invalid asset type');
+    try {
+      if (cairoEnum.variant.Gold !== undefined) return 'Gold';
+      if (cairoEnum.variant.Water !== undefined) return 'Water';
+      if (cairoEnum.variant.Oil !== undefined) return 'Oil';
+      throw new Error('Invalid asset type enum');
+    } catch (error) {
+      console.error('Error converting Cairo enum to asset:', error);
+      throw error;
+    }
   },
 
   // Get all asset types
@@ -52,25 +80,37 @@ export const AssetTypeUtils = {
 export const ActionTypeUtils = {
   // Convert string to CairoCustomEnum
   toCairoEnum: (action: ActionType): CairoCustomEnum => {
-    switch (action) {
-      case 'Buy':
-        return new CairoCustomEnum({ Buy: "", Sell: undefined, Burn: undefined, Sabotage: undefined });
-      case 'Sell':
-        return new CairoCustomEnum({ Buy: undefined, Sell: "", Burn: undefined, Sabotage: undefined });
-      case 'Burn':
-        return new CairoCustomEnum({ Buy: undefined, Sell: undefined, Burn: "", Sabotage: undefined });
-      case 'Sabotage':
-        return new CairoCustomEnum({ Buy: undefined, Sell: undefined, Burn: undefined, Sabotage: "" });
+    try {
+      switch (action) {
+        case 'Buy':
+          return new CairoCustomEnum({ Buy: "", Sell: undefined, Burn: undefined, Sabotage: undefined });
+        case 'Sell':
+          return new CairoCustomEnum({ Buy: undefined, Sell: "", Burn: undefined, Sabotage: undefined });
+        case 'Burn':
+          return new CairoCustomEnum({ Buy: undefined, Sell: undefined, Burn: "", Sabotage: undefined });
+        case 'Sabotage':
+          return new CairoCustomEnum({ Buy: undefined, Sell: undefined, Burn: undefined, Sabotage: "" });
+        default:
+          throw new Error(`Invalid action type: ${action}`);
+      }
+    } catch (error) {
+      console.error('Error converting action to Cairo enum:', error);
+      throw error;
     }
   },
 
   // Convert CairoCustomEnum to string
   fromCairoEnum: (cairoEnum: CairoCustomEnum): ActionType => {
-    if (cairoEnum.variant.Buy !== undefined) return 'Buy';
-    if (cairoEnum.variant.Sell !== undefined) return 'Sell';
-    if (cairoEnum.variant.Burn !== undefined) return 'Burn';
-    if (cairoEnum.variant.Sabotage !== undefined) return 'Sabotage';
-    throw new Error('Invalid action type');
+    try {
+      if (cairoEnum.variant.Buy !== undefined) return 'Buy';
+      if (cairoEnum.variant.Sell !== undefined) return 'Sell';
+      if (cairoEnum.variant.Burn !== undefined) return 'Burn';
+      if (cairoEnum.variant.Sabotage !== undefined) return 'Sabotage';
+      throw new Error('Invalid action type enum');
+    } catch (error) {
+      console.error('Error converting Cairo enum to action:', error);
+      throw error;
+    }
   }
 };
 
@@ -78,10 +118,15 @@ export const ActionTypeUtils = {
 export const BigNumberUtils = {
   // Convert BigNumberish to number for display
   toNumber: (value: BigNumberish): number => {
-    if (typeof value === 'number') return value;
-    if (typeof value === 'string') return parseInt(value, 10);
-    if (typeof value === 'bigint') return Number(value);
-    return 0;
+    try {
+      if (typeof value === 'number') return value;
+      if (typeof value === 'string') return parseInt(value, 10);
+      if (typeof value === 'bigint') return Number(value);
+      return 0;
+    } catch (error) {
+      console.error('Error converting BigNumber to number:', error);
+      return 0;
+    }
   },
 
   // Convert number to BigNumberish
@@ -143,8 +188,8 @@ interface AppState {
   isConnected: boolean;
   
   // Game Interface state
-  gameState: any; // Socket-based game state
-  currentPlayer: any; // Socket-based current player
+  gameState: GameState | null;
+  currentPlayer: CurrentPlayer | null;
   isHost: boolean;
   amount: number;
   targetPlayer: string;
@@ -211,8 +256,8 @@ interface AppActions {
   getMarketVolatility: () => BigNumberish;
   
   // Game Interface actions
-  setGameState: (gameState: any) => void;
-  setCurrentPlayer: (player: any) => void;
+  setGameState: (gameState: GameState | null) => void;
+  setCurrentPlayer: (player: CurrentPlayer | null) => void;
   setIsHost: (isHost: boolean) => void;
   setAmount: (amount: number) => void;
   setTargetPlayer: (target: string) => void;
@@ -232,20 +277,47 @@ interface AppActions {
 // Combine state and actions
 type AppStore = AppState & AppActions;
 
-// Initial state
+// Initial state - now includes all properties from AppState
 const initialState: AppState = {
+  // Player data
   player: null,
   inventory: null,
+  
+  // Game data
   currentGame: null,
   market: null,
   gameActions: [],
+  
+  // UI state
   isLoading: false,
   error: null,
+  
+  // Game state
   gameStarted: false,
   selectedAsset: null,
   selectedAction: null,
+  
+  // Events
   recentEvents: [],
+  
+  // Connection state
   isConnected: false,
+  
+  // Game Interface state
+  gameState: null,
+  currentPlayer: null,
+  isHost: false,
+  amount: 0,
+  targetPlayer: '',
+  notifications: [],
+  gameFinished: false,
+  showWinnerModal: false,
+  
+  // Mobile UI state
+  activeTab: 'wallet',
+  showMobileMenu: false,
+  isLandscape: false,
+  isMobile: false,
 };
 
 // Create the store
@@ -306,7 +378,9 @@ const useAppStore = create<AppStore>()(
         inventory: null,
         gameActions: [],
         selectedAsset: null,
-        selectedAction: null
+        selectedAction: null,
+        gameFinished: false,
+        showWinnerModal: false
       }),
 
       // Event handling
@@ -317,83 +391,113 @@ const useAppStore = create<AppStore>()(
       clearEvents: () => set({ recentEvents: [] }),
 
       handleGameStarted: (data) => {
-        const event: GameEvent = {
-          type: 'GameStarted',
-          data,
-          timestamp: Date.now()
-        };
-        set((state) => ({
-          gameStarted: true,
-          recentEvents: [event, ...state.recentEvents].slice(0, 50)
-        }));
+        try {
+          const event: GameEvent = {
+            type: 'GameStarted',
+            data,
+            timestamp: Date.now()
+          };
+          set((state) => ({
+            gameStarted: true,
+            recentEvents: [event, ...state.recentEvents].slice(0, 50)
+          }));
+        } catch (error) {
+          console.error('Error handling game started:', error);
+          set({ error: 'Failed to handle game started event' });
+        }
       },
 
       handleGameEnded: (data) => {
-        const event: GameEvent = {
-          type: 'GameEnded',
-          data,
-          timestamp: Date.now()
-        };
-        get().endGame();
-        get().addEvent(event);
+        try {
+          const event: GameEvent = {
+            type: 'GameEnded',
+            data,
+            timestamp: Date.now()
+          };
+          get().endGame();
+          get().addEvent(event);
+        } catch (error) {
+          console.error('Error handling game ended:', error);
+          set({ error: 'Failed to handle game ended event' });
+        }
       },
 
       handlePlayerJoined: (data) => {
-        const event: GameEvent = {
-          type: 'PlayerJoined',
-          data,
-          timestamp: Date.now()
-        };
-        get().addEvent(event);
+        try {
+          const event: GameEvent = {
+            type: 'PlayerJoined',
+            data,
+            timestamp: Date.now()
+          };
+          get().addEvent(event);
+        } catch (error) {
+          console.error('Error handling player joined:', error);
+          set({ error: 'Failed to handle player joined event' });
+        }
       },
 
       handleActionExecuted: (data) => {
-        const event: GameEvent = {
-          type: 'ActionExecuted',
-          data,
-          timestamp: Date.now()
-        };
-        get().addEvent(event);
+        try {
+          const event: GameEvent = {
+            type: 'ActionExecuted',
+            data,
+            timestamp: Date.now()
+          };
+          get().addEvent(event);
+        } catch (error) {
+          console.error('Error handling action executed:', error);
+          set({ error: 'Failed to handle action executed event' });
+        }
       },
 
       handleSabotageSuccess: (data) => {
-        const event: GameEvent = {
-          type: 'SabotageSuccess',
-          data,
-          timestamp: Date.now()
-        };
-        get().addEvent(event);
+        try {
+          const event: GameEvent = {
+            type: 'SabotageSuccess',
+            data,
+            timestamp: Date.now()
+          };
+          get().addEvent(event);
+        } catch (error) {
+          console.error('Error handling sabotage success:', error);
+          set({ error: 'Failed to handle sabotage success event' });
+        }
       },
 
       handleAssetBurned: (data) => {
-        const event: GameEvent = {
-          type: 'AssetBurned',
-          data,
-          timestamp: Date.now()
-        };
-        
-        // Update market price
-        const { market } = get();
-        if (market) {
-          const asset = AssetTypeUtils.fromCairoEnum(data.asset);
-          const updatedMarket = { ...market };
+        try {
+          const event: GameEvent = {
+            type: 'AssetBurned',
+            data,
+            timestamp: Date.now()
+          };
           
-          switch (asset) {
-            case 'Gold':
-              updatedMarket.gold_price = data.new_price;
-              break;
-            case 'Water':
-              updatedMarket.water_price = data.new_price;
-              break;
-            case 'Oil':
-              updatedMarket.oil_price = data.new_price;
-              break;
+          // Update market price
+          const { market } = get();
+          if (market) {
+            const asset = AssetTypeUtils.fromCairoEnum(data.asset);
+            const updatedMarket = { ...market };
+            
+            switch (asset) {
+              case 'Gold':
+                updatedMarket.gold_price = data.new_price;
+                break;
+              case 'Water':
+                updatedMarket.water_price = data.new_price;
+                break;
+              case 'Oil':
+                updatedMarket.oil_price = data.new_price;
+                break;
+            }
+            
+            set({ market: updatedMarket });
           }
           
-          set({ market: updatedMarket });
+          get().addEvent(event);
+        } catch (error) {
+          console.error('Error handling asset burned:', error);
+          set({ error: 'Failed to handle asset burned event' });
         }
-        
-        get().addEvent(event);
       },
 
       // Connection actions
@@ -481,7 +585,41 @@ const useAppStore = create<AppStore>()(
       getMarketVolatility: () => {
         const { market } = get();
         return market?.volatility_seed || 0;
-      }
+      },
+
+      // Game Interface actions (previously missing)
+      setGameState: (gameState) => set({ gameState }),
+      
+      setCurrentPlayer: (currentPlayer) => set({ currentPlayer }),
+      
+      setIsHost: (isHost) => set({ isHost }),
+      
+      setAmount: (amount) => set({ amount }),
+      
+      setTargetPlayer: (targetPlayer) => set({ targetPlayer }),
+      
+      addNotification: (message) => set((state) => ({
+        notifications: [...state.notifications, message]
+      })),
+      
+      removeNotification: (message) => set((state) => ({
+        notifications: state.notifications.filter(n => n !== message)
+      })),
+      
+      clearNotifications: () => set({ notifications: [] }),
+      
+      setGameFinished: (gameFinished) => set({ gameFinished }),
+      
+      setShowWinnerModal: (showWinnerModal) => set({ showWinnerModal }),
+
+      // Mobile UI actions (previously missing)
+      setActiveTab: (activeTab) => set({ activeTab }),
+      
+      setShowMobileMenu: (showMobileMenu) => set({ showMobileMenu }),
+      
+      setIsLandscape: (isLandscape) => set({ isLandscape }),
+      
+      setIsMobile: (isMobile) => set({ isMobile }),
     }),
     {
       name: 'playerzero-store',
@@ -491,9 +629,12 @@ const useAppStore = create<AppStore>()(
         gameStarted: state.gameStarted,
         selectedAsset: state.selectedAsset,
         selectedAction: state.selectedAction,
+        isHost: state.isHost,
+        gameFinished: state.gameFinished,
+        activeTab: state.activeTab,
       }),
     }
   )
 );
 
-export default useAppStore; 
+export default useAppStore;

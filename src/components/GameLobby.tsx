@@ -9,6 +9,16 @@ interface GameLobbyProps {
   onPlayGame: () => void;
 }
 
+interface PublicGame {
+  id: string;
+  name: string;
+  status: string;
+  currentPlayers: number;
+  maxPlayers: number;
+  hostName: string;
+  createdAt: string;
+}
+
 export function GameLobby({ onPlayGame }: GameLobbyProps) {
   const { socket, connected, setGameInfo } = useSocket();
   const { createGame, joinGame } = useGame();
@@ -19,6 +29,17 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
   const [joinGameId, setJoinGameId] = useState("");
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState("");
+
+  // Public games state
+  const [publicGames, setPublicGames] = useState<PublicGame[]>([]);
+  const [refreshingGames, setRefreshingGames] = useState(false);
+  const [joiningGameId, setJoiningGameId] = useState<string | null>(null);
+
+  // Create game modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [gameName, setGameName] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Load user profile
   useEffect(() => {
@@ -32,9 +53,17 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
     }
   }, []);
 
-  // Socket listeners for join by ID mechanics
+  // Load public games on mount
   useEffect(() => {
     if (!socket) return;
+
+    loadPublicGames();
+
+    // Set up socket event listeners
+    socket.on("public-games-list", (games: PublicGame[]) => {
+      setPublicGames(games);
+      setRefreshingGames(false);
+    });
 
     socket.on("game-created", (data: { gameId: string; playerId: string }) => {
       console.log("Game created:", data);
@@ -61,19 +90,29 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
     });
 
     return () => {
+      socket.off("public-games-list");
       socket.off("game-created");
       socket.off("game-joined");
       socket.off("error");
     };
   }, [socket, userProfile, setGameInfo, onPlayGame]);
 
+  const loadPublicGames = () => {
+    if (!socket || !connected) {
+      console.log("Socket not connected, skipping public games load");
+      return;
+    }
+    setRefreshingGames(true);
+    socket.emit("get-public-games");
+  };
+
   const handleCreateGame = async () => {
-    if (!userProfile?.name || !account) {
-      setError("Need profile and wallet");
+    if (!userProfile?.name || !account || !gameName.trim()) {
+      setError("Need profile, wallet, and game name");
       return;
     }
 
-    setIsCreating(true);
+    setLoading(true);
     setError("");
 
     try {
@@ -86,12 +125,17 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
         console.log("game created...joined game");
         if (game?.id) {
           socket?.emit("create-game", {
-            gameName: `${userProfile.name}'s Game`,
+            gameName: gameName.trim(),
             gameId: game.id,
             playerName: userProfile.name,
-            isPrivate: false,
+            isPrivate: isPrivate,
             walletAddress: addAddressPadding(account.address).toLowerCase(),
           });
+
+          // Close modal and reset form
+          setShowCreateModal(false);
+          setGameName("");
+          setIsPrivate(false);
         } else {
           throw new Error("Game ID not available");
         }
@@ -100,7 +144,31 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create game");
-      setIsCreating(false);
+      setLoading(false);
+    }
+  };
+
+  const handleJoinPublicGame = async (gameId: string) => {
+    if (!userProfile?.name || !account) {
+      setError("Need profile and wallet");
+      return;
+    }
+
+    setJoiningGameId(gameId);
+    setError("");
+
+    try {
+      await joinGame(gameId, userProfile.name);
+      const playerAddress = addAddressPadding(account.address).toLowerCase();
+
+      socket?.emit("join-game", {
+        gameId: gameId,
+        playerName: userProfile.name,
+        walletAddress: playerAddress,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to join game");
+      setJoiningGameId(null);
     }
   };
 
@@ -159,14 +227,18 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
   }
 
   return (
-    <div className="min-h-screen bg-pixel-black p-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-pixel-black scanlines font-pixel">
+      <div className="max-w-6xl mx-auto p-4">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-pixel-2xl font-bold text-pixel-primary mb-2">
-            Game Lobby
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-pixel-2xl font-bold text-pixel-primary uppercase tracking-wider">
+            Lobby
           </h1>
-          <p className="text-pixel-base-gray">Welcome {userProfile.name}!</p>
+          <div className="flex items-center space-x-4">
+            <div className="text-pixel-base-gray text-pixel-sm font-bold pixel-notification bg-pixel-dark-gray border-pixel-gray px-3 py-2">
+              Welcome {userProfile.name}!
+            </div>
+          </div>
         </div>
 
         {/* Error Display */}
@@ -176,53 +248,268 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
           </div>
         )}
 
-        {/* Main Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* Create Game */}
-          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6">
-            <h3 className="text-pixel-lg font-bold text-pixel-primary mb-4 text-center">
-              Create Game
-            </h3>
-            <p className="text-pixel-base-gray text-center mb-6">
-              Start a new multiplayer game
-            </p>
-            <button
-              onClick={handleCreateGame}
-              disabled={isCreating || !account}
-              className="w-full px-6 py-4 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold pixel-btn disabled:opacity-50"
-            >
-              {isCreating ? "Creating..." : "Create New Game"}
-            </button>
-          </div>
+        {/* Main Grid Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column - Quick Actions */}
+          <div className="space-y-4">
+            {/* Create Game */}
+            <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-4">
+              <h3 className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider mb-3">
+                Create Game
+              </h3>
+              <p className="text-pixel-base-gray text-pixel-xs mb-4">
+                Start a new multiplayer trading game
+              </p>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                disabled={isCreating || !account}
+                className="w-full px-4 py-3 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50"
+              >
+                {isCreating ? "Creating..." : "Create Game"}
+              </button>
+            </div>
 
-          {/* Join Game by ID */}
-          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6">
-            <h3 className="text-pixel-lg font-bold text-pixel-primary mb-4 text-center">
-              Join Game
-            </h3>
-            <p className="text-pixel-base-gray text-center mb-4">
-              Enter a game ID to join
-            </p>
-            <input
-              type="text"
-              value={joinGameId}
-              onChange={(e) => setJoinGameId(e.target.value)}
-              placeholder="Game ID"
-              className="w-full px-4 py-3 bg-pixel-gray border-2 border-pixel-light-gray text-pixel-primary font-bold mb-4 focus:outline-none focus:border-pixel-accent"
-              maxLength={20}
-            />
-            <button
-              onClick={handleJoinGame}
-              disabled={isJoining || !joinGameId.trim() || !account}
-              className="w-full px-6 py-4 bg-pixel-accent hover:bg-pixel-warning text-pixel-black font-bold pixel-btn disabled:opacity-50"
-            >
-              {isJoining ? "Joining..." : "Join Game"}
-            </button>
+            {/* Join by ID */}
+            <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-4">
+              <h3 className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider mb-3">
+                Join by ID
+              </h3>
+              <input
+                type="text"
+                value={joinGameId}
+                onChange={(e) => setJoinGameId(e.target.value)}
+                placeholder="Enter Game ID"
+                className="w-full px-3 py-2 mb-3 bg-pixel-gray border-2 border-pixel-light-gray text-pixel-primary font-bold text-pixel-sm focus:outline-none focus:border-pixel-accent"
+                maxLength={20}
+              />
+              <button
+                onClick={handleJoinGame}
+                disabled={isJoining || !joinGameId.trim() || !account}
+                className="w-full px-4 py-2 bg-pixel-accent hover:bg-pixel-warning text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50"
+              >
+                {isJoining ? "Joining..." : "Join Game"}
+              </button>
+            </div>
+          </div>
+          {/* Middle Column - Public Games List */}
+          <div className="lg:col-span-2">
+            <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-pixel-lg font-bold text-pixel-primary uppercase tracking-wider">
+                  Public Games
+                </h3>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={loadPublicGames}
+                    disabled={refreshingGames}
+                    className="px-3 py-1 bg-pixel-accent hover:bg-pixel-warning text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50"
+                  >
+                    {refreshingGames ? "Refreshing..." : "Refresh"}
+                  </button>
+                  <div className="flex items-center space-x-1">
+                    <div
+                      className="w-2 h-2 bg-pixel-success pixel-notification border-pixel-success"
+                      title="Live Updates Active"
+                    ></div>
+                    <span className="text-pixel-xs text-pixel-success font-bold">
+                      LIVE
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {refreshingGames ? (
+                <div className="text-center py-8">
+                  <div className="text-pixel-warning text-pixel-sm font-bold">
+                    Loading games...
+                  </div>
+                </div>
+              ) : publicGames.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-pixel-base-gray text-pixel-sm">
+                    No public games available
+                  </div>
+                  <div className="text-pixel-xs text-pixel-base-gray mt-2">
+                    Be the first to create one!
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-pixel-gray pixel-panel border-pixel-light-gray">
+                  {/* Table Header */}
+                  <div className="grid grid-cols-5 gap-4 p-3 bg-pixel-dark-gray border-b-2 border-pixel-light-gray">
+                    <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">
+                      Game Name
+                    </div>
+                    <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">
+                      Status
+                    </div>
+                    <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">
+                      Host
+                    </div>
+                    <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">
+                      Players
+                    </div>
+                    <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider text-center">
+                      Join
+                    </div>
+                  </div>
+
+                  {/* Table Rows */}
+                  {publicGames.map((game, index) => (
+                    <div
+                      key={game.id}
+                      className={`grid grid-cols-5 gap-4 p-3 items-center border-b border-pixel-light-gray hover:bg-pixel-dark-gray transition-colors ${
+                        index % 2 === 0
+                          ? "bg-pixel-gray"
+                          : "bg-pixel-light-gray"
+                      }`}
+                    >
+                      {/* Game Name */}
+                      <div
+                        className="text-pixel-primary font-bold text-pixel-sm truncate"
+                        title={game.name}
+                      >
+                        {game.name}
+                      </div>
+
+                      {/* Status */}
+                      <div>
+                        <span
+                          className={`text-pixel-xs px-2 py-1 pixel-notification border-pixel-black font-bold uppercase tracking-wider ${
+                            game.status === "Open"
+                              ? "bg-pixel-success text-pixel-black"
+                              : "bg-pixel-warning text-pixel-black"
+                          }`}
+                        >
+                          {game.status}
+                        </span>
+                      </div>
+
+                      {/* Host */}
+                      <div
+                        className="text-pixel-base-gray text-pixel-sm truncate"
+                        title={game.hostName}
+                      >
+                        {game.hostName}
+                      </div>
+
+                      {/* Players */}
+                      <div className="text-pixel-base-gray text-pixel-sm font-bold">
+                        {game.currentPlayers}/{game.maxPlayers}
+                      </div>
+
+                      {/* Join Button */}
+                      <div className="text-center">
+                        <button
+                          onClick={() => handleJoinPublicGame(game.id)}
+                          disabled={
+                            joiningGameId === game.id || game.status !== "Open"
+                          }
+                          className="px-3 py-1 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50"
+                        >
+                          {joiningGameId === game.id ? "Joining..." : "Join"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {publicGames.length > 0 && (
+                <div className="mt-4 text-center">
+                  <div className="text-pixel-xs text-pixel-base-gray">
+                    {publicGames.length} public game
+                    {publicGames.length !== 1 ? "s" : ""} available
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
+        {/* Create Game Modal */}
+        {showCreateModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+            <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6 mx-4 max-w-md w-full">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-pixel-lg font-bold text-pixel-primary uppercase tracking-wider">
+                  Create Game
+                </h3>
+                <div className="flex items-center space-x-1">
+                  <div className="w-2 h-2 bg-pixel-primary pixel-notification border-pixel-primary"></div>
+                  <span className="text-pixel-xs text-pixel-primary font-bold">
+                    NEW
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-pixel-sm font-bold text-pixel-primary mb-2 uppercase tracking-wider">
+                    Game Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Enter game name..."
+                    value={gameName}
+                    onChange={(e) => setGameName(e.target.value)}
+                    className="w-full px-3 py-2 bg-pixel-gray border-2 border-pixel-light-gray text-pixel-primary font-bold text-pixel-sm focus:outline-none focus:border-pixel-accent"
+                    maxLength={30}
+                  />
+                  <div className="text-pixel-xs text-pixel-base-gray mt-1">
+                    {gameName.length}/30 characters
+                  </div>
+                </div>
+
+                <div className="bg-pixel-gray pixel-panel border-pixel-light-gray p-3">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="private-game"
+                      checked={isPrivate}
+                      onChange={() => setIsPrivate(!isPrivate)}
+                      className="w-4 h-4"
+                    />
+                    <label
+                      htmlFor="private-game"
+                      className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider"
+                    >
+                      Private Game
+                    </label>
+                  </div>
+                  <div className="text-pixel-xs text-pixel-base-gray mt-2">
+                    {isPrivate
+                      ? "Only players with the Game ID can join"
+                      : "Visible in public games list"}
+                  </div>
+                </div>
+
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleCreateGame}
+                    disabled={!gameName.trim() || loading}
+                    className="flex-1 px-4 py-3 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50"
+                  >
+                    {loading ? "Creating..." : "Create"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCreateModal(false);
+                      setGameName("");
+                      setIsPrivate(false);
+                      setError("");
+                    }}
+                    className="px-4 py-3 bg-pixel-gray hover:bg-pixel-error text-pixel-primary hover:text-pixel-white font-bold text-pixel-sm pixel-btn border-pixel-gray uppercase tracking-wider"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Status Info */}
-        <div className="bg-pixel-gray pixel-panel border-pixel-light-gray p-4 text-center">
+        <div className="mt-4 bg-pixel-gray pixel-panel border-pixel-light-gray p-4 text-center">
           <div className="text-pixel-xs text-pixel-base-gray">
             <span className="text-pixel-primary">Status:</span>{" "}
             {connected ? "🟢 Connected" : "🔴 Disconnected"} |

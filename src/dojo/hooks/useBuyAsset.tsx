@@ -74,7 +74,7 @@ console.log("buying 2",asset);
         txStatus: 'PENDING'
       });
 
-      console.log(`📤 Executing buy ${asset} transaction...`);
+      console.log(`📤 Executing buy ${asset} transaction...`,currentGame.id);
 
       // Create asset enum for the transaction
       const assetEnum = new CairoCustomEnum({ 

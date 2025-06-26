@@ -47,8 +47,8 @@ export function Header({ currentPage, onNavigate }: HeaderProps) {
               <Sword className="w-4 h-4 sm:w-5 sm:h-5 text-pixel-black" />
             </div>
             <h1 className="text-pixel-sm sm:text-pixel-base font-bold text-pixel-primary uppercase tracking-wide">
-              <span className="hidden xs:inline">Player Zero</span>
-              <span className="xs:hidden">PZ</span>
+              <span className="xs:inline">Player Zero</span>
+              {/* <span className="xs:hidden">PZ</span> */}
             </h1>
           </div>
 

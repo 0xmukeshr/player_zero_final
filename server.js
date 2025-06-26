@@ -534,8 +534,10 @@ io.on('connection', (socket) => {
       case 'Sabotage':
         if (player.tokens >= 100 && targetPlayer) {
           player.tokens -= 100;
-          const target = game.players.find(p => p.name === targetPlayer);
-          if (target) {
+          const target = game.players.find(p => p.id === targetPlayer);
+          console.log("target",target);
+          
+          if (target.assets[resource.toLowerCase()] >= amount) {
             target.assets[resource.toLowerCase()] = Math.max(0, target.assets[resource.toLowerCase()] - amount);
             target.totalAssets = target.assets.gold + target.assets.water + target.assets.oil;
             actionText = `${player.name} sabotaged ${target.name}'s ${resource.charAt(0).toUpperCase() + resource.slice(1)} reserves`;
@@ -543,9 +545,10 @@ io.on('connection', (socket) => {
         }
         break;
     }
-    
+    // {"state":{"player":{"address":"0x5c4556fe32577eb35375d5bc9de4ee27dd5c099e312a8ddf367791e9f5bc11b","name":"CryptoHero414","token_balance":1000},"currentGame":{"id":"1750896436","round":"1","is_active":true,"max_rounds":"20","num_players":"3"},"gameStarted":true,"selectedAsset":"Water","selectedAction":"Buy","isHost":false,"gameFinished":false,"activeTab":"wallet"},"version":0}
     // Update player's total assets
     player.totalAssets = player.assets.gold + player.assets.water + player.assets.oil;
+    console.log();
     
     // Add action to recent actions
     if (actionText) {
@@ -554,7 +557,7 @@ io.on('connection', (socket) => {
     }
     
     activeGameStates.set(playerInfo.gameId, game);
-    console.log("final state",game);
+    // console.log("final state",game);
     
     io.to(playerInfo.gameId).emit('game-state', game);
   });
