@@ -56,7 +56,7 @@ const toBigNumberish = (value: string | number): string => {
 };
 
 // Function to fetch game and market data from GraphQL
-const fetchGameData = async (gameId: BigNumberish): Promise<{ game: Game | null}> => {
+const fetchGameData = async (gameId: string): Promise<{ game: Game | null}> => {
   try {
     console.log("🔍 Fetching game and market data for game:", gameId);
 
@@ -101,77 +101,35 @@ const fetchGameData = async (gameId: BigNumberish): Promise<{ game: Game | null}
 };
 
 // Main hook with fixed dependency issues
-export const UseGameData = (
-  gameId?: BigNumberish, 
-  options: UseGameDataOptions = {}
-): UseGameReturn => {
-  const {
-    enabled = true,
-    refetchInterval = 0,
-    refetchOnWindowFocus = false,
-    refetchOnMount = true,
-    refetchOnReconnect = false
-  } = options;
+export const UseGameData = (): UseGameReturn => {
+ 
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
-  const { account } = useAccount();
+ 
   
   // CRITICAL FIX: Use separate selectors to avoid circular dependencies
   const currentGame = useAppStore(state => state.currentGame);
   const setCurrentGame = useAppStore(state => state.setCurrentGame);
   const updateGameRound = useAppStore(state => state.updateGameRound);
-
-  // Use refs to track values and prevent unnecessary re-renders
-  const lastFetchedGameId = useRef<string | null>(null);
-  const lastFetchTimestamp = useRef<number>(0);
-  const isFetchingRef = useRef<boolean>(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Determine the effective game ID
-  const effectiveGameId = useMemo(() => {
-    return gameId || currentGame?.id;
-  }, [gameId, currentGame?.id]);
-
+const targetGameId = currentGame?.id;
+ 
+  const isFetchingRef = useRef<boolean>(false); 
+ 
   // Memoize the refetch function to prevent recreation on every render
   const refetch = useCallback(async () => {
-    const targetGameId = effectiveGameId;
+    const targetGameId = currentGame?.id;
     
     if (!targetGameId) {
       console.log("❌ No game ID available for fetch");
       setIsLoading(false);
       return;
     }
-
-    if (!enabled) {
-      console.log("⏸️ Fetch disabled");
-      return;
-    }
-
-    // Prevent concurrent fetches for the same game ID
-    if (isFetchingRef.current && lastFetchedGameId.current === targetGameId.toString()) {
-      console.log("⏳ Already fetching for game ID:", targetGameId);
-      return;
-    }
-
-    // Throttle requests - prevent fetching the same game too frequently
-    const now = Date.now();
-    const timeSinceLastFetch = now - lastFetchTimestamp.current;
-    const minInterval = 1000; // Minimum 1 second between fetches
-
-    if (
-      lastFetchedGameId.current === targetGameId.toString() && 
-      timeSinceLastFetch < minInterval
-    ) {
-      console.log("🚫 Throttling fetch request, too soon since last fetch");
-      return;
-    }
+ 
+  
 
     try {
-      isFetchingRef.current = true;
-      lastFetchedGameId.current = targetGameId.toString();
-      lastFetchTimestamp.current = now;
-      
+ 
       setIsLoading(true);
       setError(null);
 
@@ -219,77 +177,10 @@ export const UseGameData = (
       setIsLoading(false);
       isFetchingRef.current = false;
     }
-  }, [effectiveGameId, enabled, setCurrentGame, updateGameRound]);
+  }, [targetGameId, setCurrentGame, updateGameRound]);
 
-  // Set up polling interval if specified
-  useEffect(() => {
-    if (refetchInterval > 0 && enabled && effectiveGameId) {
-      intervalRef.current = setInterval(() => {
-        refetch();
-      }, refetchInterval);
-
-      return () => {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-      };
-    }
-  }, [refetch, refetchInterval, enabled, effectiveGameId]);
-
-  // Initial fetch when gameId changes (with proper dependency management)
-  useEffect(() => {
-    if (effectiveGameId && enabled && refetchOnMount) {
-      // Only fetch if it's a different game ID or enough time has passed
-      const gameIdString = effectiveGameId.toString();
-      const now = Date.now();
-      const timeSinceLastFetch = now - lastFetchTimestamp.current;
-      
-      if (
-        lastFetchedGameId.current !== gameIdString || 
-        timeSinceLastFetch > 5000 // 5 seconds
-      ) {
-        console.log("🔄 Game ID changed or sufficient time passed, refetching:", effectiveGameId);
-        refetch();
-      }
-    }
-  }, [effectiveGameId, enabled, refetchOnMount]); // Removed refetch from dependencies to prevent loop
-
-  // Handle account changes
-  useEffect(() => {
-    if (!account) {
-      console.log("❌ No account, clearing game data");
-      setCurrentGame(null);
-      setError(null);
-      setIsLoading(false);
-      lastFetchedGameId.current = null;
-      lastFetchTimestamp.current = 0;
-    }
-  }, [account, setCurrentGame]);
-
-  // Handle window focus refetch
-  useEffect(() => {
-    if (!refetchOnWindowFocus || !enabled) return;
-
-    const handleFocus = () => {
-      if (effectiveGameId) {
-        refetch();
-      }
-    };
-
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [refetch, refetchOnWindowFocus, enabled, effectiveGameId]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      isFetchingRef.current = false;
-    };
-  }, []);
+ 
+   
 
   return {
     game: currentGame,

@@ -10,7 +10,8 @@ interface TimerProps {
 
 export function Timer({ timeRemaining }: TimerProps) {
   const formatTime = (time: number) => time.toString().padStart(2, '0');
-
+  // console.log("running");
+  
   return (
     <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3 max-w-xs">
       <h3 className="text-pixel-sm font-bold text-pixel-primary mb-2 uppercase tracking-wider text-center">Timer</h3>

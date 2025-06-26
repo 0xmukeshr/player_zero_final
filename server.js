@@ -54,6 +54,12 @@ function createInitialGameState() {
       { resource: 'water', change: 0, percentage: '+0%' },
       { resource: 'oil', change: 0, percentage: '+0%' }
     ],
+    // New market prices
+    marketPrices: {
+      gold: 100,
+      water: 50,
+      oil: 150
+    },
     recentActions: [],
     actionHistory: {}, // Store actions by round: { roundNumber: [actions] }
     status: 'waiting', // waiting, playing, finished
@@ -196,7 +202,9 @@ io.on('connection', (socket) => {
           isPrivate: dbGame.visibility === 'private',
           status: dbGame.status,
           host: dbGame.host_player_id,
-          createdAt: new Date(dbGame.created_at)
+          createdAt: new Date(dbGame.created_at),
+          // Ensure market prices exist
+          marketPrices: dbGame.game_state.marketPrices || { gold: 100, water: 50, oil: 150 }
         };
         
         activeGameStates.set(gameId, game);
@@ -280,7 +288,9 @@ io.on('connection', (socket) => {
           isPrivate: dbGame.visibility === 'private',
           status: dbGame.status,
           host: dbGame.host_player_id,
-          createdAt: new Date(dbGame.created_at)
+          createdAt: new Date(dbGame.created_at),
+          // Ensure market prices exist
+          marketPrices: dbGame.game_state.marketPrices || { gold: 100, water: 50, oil: 150 }
         };
         
         activeGameStates.set(gameId, game);
@@ -405,8 +415,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle next round (host only)
-  socket.on('next-round', async () => {
+  // NEW: Handle market price updates from host
+  socket.on('update-market-prices', (data) => {
     try {
       const playerInfo = players.get(socket.id);
       if (!playerInfo) return;
@@ -414,65 +424,45 @@ io.on('connection', (socket) => {
       const game = activeGameStates.get(playerInfo.gameId);
       if (!game || game.status !== 'playing') return;
       
-      // Verify host
+      // Verify that the player is the host
       const isHost = (
         game.host === playerInfo.playerId ||
-        game.players.find(p => p.id === playerInfo.playerId)?.walletAddress === game.players.find(p => p.id === game.host)?.walletAddress
+        game.players.find(p => p.id === playerInfo.playerId)?.walletAddress === game.players.find(p => p.id === game.host)?.walletAddress ||
+        (game.players.length > 0 && game.players[0].id === playerInfo.playerId)
       );
       
       if (!isHost) {
-        socket.emit('error', { message: 'Only the host can advance to next round' });
+        console.log(`Non-host player ${playerInfo.playerName} tried to update market prices`);
         return;
       }
       
-      // Move current round actions to action history
-      if (game.recentActions.length > 0) {
-        game.actionHistory[game.currentRound] = [...game.recentActions];
+      const { marketPrices } = data;
+      
+      if (marketPrices && typeof marketPrices === 'object') {
+        // Update market prices
+        game.marketPrices = {
+          gold: marketPrices.gold || game.marketPrices.gold,
+          water: marketPrices.water || game.marketPrices.water,
+          oil: marketPrices.oil || game.marketPrices.oil
+        };
+        
+        console.log(`Host ${playerInfo.playerName} updated market prices for game ${playerInfo.gameId}:`, game.marketPrices);
+        
+         
+        
+        activeGameStates.set(playerInfo.gameId, game);
+        
+        // Broadcast updated game state to all players
+        io.to(playerInfo.gameId).emit('game-state', game);
+        io.to(playerInfo.gameId).emit('market-prices-updated', { marketPrices: game.marketPrices });
       }
-      
-      // Advance to next round
-      game.currentRound += 1;
-      game.recentActions = [];
-      game.roundInProgress = false;
-      game.nextRoundStartTime = Date.now() + 10000;
-      
-      if (game.currentRound > game.maxRounds) {
-        await finishGame(playerInfo.gameId);
-        return;
-      }
-      
-      game.timeRemaining = { hours: 0, minutes: 1, seconds: 0 };
-      activeGameStates.set(playerInfo.gameId, game);
-      
-      io.to(playerInfo.gameId).emit('next-round', {
-        round: game.currentRound,
-        delay: 10000
-      });
-      
-      io.to(playerInfo.gameId).emit('game-state', game);
-      
-      setTimeout(() => {
-        const updatedGame = activeGameStates.get(playerInfo.gameId);
-        if (updatedGame && updatedGame.currentRound === game.currentRound) {
-          updatedGame.roundInProgress = true;
-          updatedGame.nextRoundStartTime = null;
-          activeGameStates.set(playerInfo.gameId, updatedGame);
-          
-          io.to(playerInfo.gameId).emit('round-started', {
-            round: updatedGame.currentRound
-          });
-          
-          io.to(playerInfo.gameId).emit('game-state', updatedGame);
-        }
-      }, 10000);
       
     } catch (error) {
-      console.error('Error handling next round:', error);
-      socket.emit('error', { message: 'Failed to advance to next round' });
+      console.error('Error updating market prices:', error);
     }
   });
 
-  // Handle player actions
+  // Handle player actions (UPDATED to use dynamic market prices)
   socket.on('player-action', (data) => {
     const playerInfo = players.get(socket.id);
     
@@ -486,20 +476,22 @@ io.on('connection', (socket) => {
     resetInactivityTimer(playerInfo.gameId);
     
     const { action, resource, amount, targetPlayer } = data;
-    console.log("Daaaatttttttttaaaaaaaaaadata",action, resource.toLowerCase(), amount, targetPlayer);
+    console.log("Player action data:", action, resource.toLowerCase(), amount, targetPlayer);
     
     const player = game.players.find(p => p.id === playerInfo.playerId);
     
     if (!player) return;
     
     let actionText = '';
-    const resourcePrices = { gold: 10, water: 15, oil: 25 };
+    
+    // Use dynamic market prices instead of fixed prices
+    const resourcePrices = game.marketPrices || { gold: 100, water: 50, oil: 150 };
     const price = resourcePrices[resource.toLowerCase()] * amount;
     
     switch (action) {
       case 'Buy':
         if (player.tokens >= price) {
-          console.log("buying",resource.toLowerCase());
+          console.log("buying", resource.toLowerCase());
           
           player.tokens -= price;
           player.assets[resource.toLowerCase()] += amount;
@@ -509,7 +501,7 @@ io.on('connection', (socket) => {
         
       case 'Sell':
         if (player.assets[resource.toLowerCase()] >= amount) {
-                    console.log("selling",resource.toLowerCase());
+          console.log("selling", resource.toLowerCase());
 
           const sellPrice = Math.floor(price * 0.8);
           player.tokens += sellPrice;
@@ -535,9 +527,9 @@ io.on('connection', (socket) => {
         if (player.tokens >= 100 && targetPlayer) {
           player.tokens -= 100;
           const target = game.players.find(p => p.id === targetPlayer);
-          console.log("target",target);
+          console.log("target", target);
           
-          if (target.assets[resource.toLowerCase()] >= amount) {
+          if (target && target.assets[resource.toLowerCase()] >= amount) {
             target.assets[resource.toLowerCase()] = Math.max(0, target.assets[resource.toLowerCase()] - amount);
             target.totalAssets = target.assets.gold + target.assets.water + target.assets.oil;
             actionText = `${player.name} sabotaged ${target.name}'s ${resource.charAt(0).toUpperCase() + resource.slice(1)} reserves`;
@@ -545,10 +537,9 @@ io.on('connection', (socket) => {
         }
         break;
     }
-    // {"state":{"player":{"address":"0x5c4556fe32577eb35375d5bc9de4ee27dd5c099e312a8ddf367791e9f5bc11b","name":"CryptoHero414","token_balance":1000},"currentGame":{"id":"1750896436","round":"1","is_active":true,"max_rounds":"20","num_players":"3"},"gameStarted":true,"selectedAsset":"Water","selectedAction":"Buy","isHost":false,"gameFinished":false,"activeTab":"wallet"},"version":0}
+    
     // Update player's total assets
     player.totalAssets = player.assets.gold + player.assets.water + player.assets.oil;
-    console.log();
     
     // Add action to recent actions
     if (actionText) {
@@ -557,7 +548,6 @@ io.on('connection', (socket) => {
     }
     
     activeGameStates.set(playerInfo.gameId, game);
-    // console.log("final state",game);
     
     io.to(playerInfo.gameId).emit('game-state', game);
   });
@@ -600,11 +590,13 @@ async function finishGame(gameId) {
     const game = activeGameStates.get(gameId);
     if (!game) return;
     
-    // Calculate final scores
+    // Calculate final scores using current market prices
+    const marketPrices = game.marketPrices || { gold: 100, water: 50, oil: 150 };
+    
     const finalPlayers = game.players.map(player => {
-      const goldValue = player.assets.gold * 10;
-      const waterValue = player.assets.water * 15;
-      const oilValue = player.assets.oil * 25;
+      const goldValue = player.assets.gold * marketPrices.gold;
+      const waterValue = player.assets.water * marketPrices.water;
+      const oilValue = player.assets.oil * marketPrices.oil;
       const finalScore = player.tokens + goldValue + waterValue + oilValue;
       
       return {
@@ -715,50 +707,49 @@ function resetInactivityTimer(gameId) {
   inactivityTimers.set(gameId, inactivityTimer);
 }
 
-// Game timer function
+// Game timer function with 10-second round delay
 function startGameTimer(gameId) {
   // Start inactivity timer when game starts
   resetInactivityTimer(gameId);
+  
   const timer = setInterval(async () => {
     const game = activeGameStates.get(gameId);
     if (!game || !game.timerActive) {
       clearInterval(timer);
+      gameTimers.delete(gameId);
       return;
     }
-    
-    const { hours, minutes, seconds } = game.timeRemaining;
-    let newSeconds = seconds - 1;
-    let newMinutes = minutes;
-    let newHours = hours;
-    
-    if (newSeconds < 0) {
-      newSeconds = 59;
-      newMinutes -= 1;
-    }
-    if (newMinutes < 0) {
-      newMinutes = 59;
-      newHours -= 1;
-    }
-    
-    if (newHours < 0) {
-      // Round ended
-      game.currentRound += 1;
+
+    // Handle 10-second countdown between rounds
+    if (game.roundDelay && game.roundDelay.active) {
+      game.roundDelay.timeRemaining -= 1;
       
-      if (game.currentRound > game.maxRounds) {
-        // Game finished
-        game.status = 'finished';
-        game.timerActive = false;
+      if (game.roundDelay.timeRemaining <= 0) {
+        // 10-second delay finished, start next round
+        game.roundDelay.active = false;
+        delete game.roundDelay;
         
-        // Update database status
-        await GameDatabase.updateGameStatus(gameId, 'finished');
+        // Move current round actions to action history
+        if (game.recentActions.length > 0) {
+          game.actionHistory[game.currentRound] = [...game.recentActions];
+        }
         
-        io.to(gameId).emit('game-finished', game);
-      } else {
-        // New round
-        game.timeRemaining = { hours: 0, minutes: 1, seconds: 0 };
+        // Advance to next round
+        game.currentRound += 1;
         game.recentActions = [];
         
-        // Generate new market trends
+        if (game.currentRound > game.maxRounds) {
+          // Game finished
+          await finishGame(gameId);
+          clearInterval(timer);
+          gameTimers.delete(gameId);
+          return;
+        }
+        
+        // Reset timer for new round
+        game.timeRemaining = { hours: 0, minutes: 1, seconds: 0 };
+        
+        // Generate new market changes for the new round (visual feedback only)
         game.marketChanges = game.marketChanges.map(change => {
           const randomChange = Math.floor(Math.random() * 40) - 20;
           return {
@@ -767,14 +758,53 @@ function startGameTimer(gameId) {
             percentage: `${randomChange > 0 ? '+' : ''}${randomChange}%`
           };
         });
+        
+         
       }
+      
+      activeGameStates.set(gameId, game);
+      io.to(gameId).emit('game-state', game);
+      return;
+    }
+
+    // Normal timer countdown during active round
+    const { hours, minutes, seconds } = game.timeRemaining;
+    let newSeconds = seconds - 1;
+    let newMinutes = minutes;
+    let newHours = hours;
+
+    if (newSeconds < 0) {
+      newSeconds = 59;
+      newMinutes -= 1;
+    }
+
+    if (newMinutes < 0) {
+      newMinutes = 59;
+      newHours -= 1;
+    }
+
+    if (newHours < 0) {
+      // Round time ended - start 10-second delay
+      game.roundDelay = {
+        active: true,
+        timeRemaining: 10
+      };
+      
+      // Emit round ended event with delay time
+      io.to(gameId).emit('round-ended', {
+        round: game.currentRound,
+        timeRemaining: 10
+      });
     } else {
+      // Update timer normally
       game.timeRemaining = { hours: newHours, minutes: newMinutes, seconds: newSeconds };
     }
     
     activeGameStates.set(gameId, game);
     io.to(gameId).emit('game-state', game);
   }, 1000);
+
+  gameTimers.set(gameId, timer);
 }
 
 // Market fluctuations

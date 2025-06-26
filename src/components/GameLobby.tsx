@@ -117,10 +117,11 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
 
     try {
       const response = await createGame(20);
-      console.log("game created...joining game");
+      
 
       if (response.success) {
         const game = useAppStore.getState().currentGame;
+        console.log("game created...joining game",game);
         await joinGame(game?.id!, userProfile.name);
         console.log("game created...joined game");
         if (game?.id) {

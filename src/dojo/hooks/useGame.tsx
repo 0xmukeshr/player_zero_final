@@ -286,6 +286,7 @@ const {refetch:fetchGameData}=UseGameData()
               max_rounds: maxRounds,
               num_players: 1
             });
+            console.log(currentGame);
             
             
           } else {

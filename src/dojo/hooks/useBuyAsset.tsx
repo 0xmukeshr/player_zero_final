@@ -41,7 +41,8 @@ export const useBuyAsset = (): UseBuyAssetReturn => {
   const hasPlayer = player !== null;
   const hasActiveGame = currentGame?.is_active === true;
   const canBuyAsset = isConnected && hasPlayer && hasActiveGame && !buyAssetState.isLoading;
-
+  // console.log(isConnected , hasPlayer , hasActiveGame , !buyAssetState.isLoading);
+  
   const executeBuyAsset = useCallback(async (asset: AssetType) => {
     console.log("buying 0",asset);
     if (!canBuyAsset || !account || !currentGame) {

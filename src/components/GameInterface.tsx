@@ -1,34 +1,37 @@
-import React, { useState, useEffect } from 'react';
-import { Timer } from './Timer';
-import { PlayerWallet } from './PlayerWallet';
-import { AssetsList } from './AssetsList';
-import { PlayerStats } from './PlayerStats';
-import { ActionPanel } from './ActionPanelSimple';
-import { GameErrorBoundary } from './GameErrorBoundary';
-import { useSocket } from '../context/SocketContext';
-import { useAudio } from '../hooks/useAudio';
-import { useGame } from '../dojo/hooks/useGame'; //  
-import useAppStore, { AssetType, ActionType } from '../zustand/store';
-import { useUnifiedActions } from '../hooks/useUnifiedActions';
-import { UseGameData } from '../dojo/hooks/fetchGame';
+import React, { useState, useEffect } from "react";
+import { Timer } from "./Timer";
+import { PlayerWallet } from "./PlayerWallet";
+import { AssetsList } from "./AssetsList";
+import { PlayerStats } from "./PlayerStats";
+import { ActionPanel } from "./ActionPanelSimple";
+import { GameErrorBoundary } from "./GameErrorBoundary";
+import { useSocket } from "../context/SocketContext";
+import { useAudio } from "../hooks/useAudio";
+import { useGame } from "../dojo/hooks/useGame"; //
+import useAppStore, { AssetType, ActionType } from "../zustand/store";
+import { useUnifiedActions } from "../hooks/useUnifiedActions";
+import { UseGameData } from "../dojo/hooks/fetchGame";
+import { useNextRound } from "../dojo/hooks/useNextRound";
+import { useMarket } from "../dojo/hooks/fetchMarket";
 
 interface GameInterfaceProps {
   onExitGame: () => void;
 }
 
 function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
-  const { socket, connected, gameId, playerId, playerName, clearGameInfo } = useSocket();
+  const { socket, connected, gameId, playerId, playerName, clearGameInfo } =
+    useSocket();
   const { playSound } = useAudio();
-  
+
   // Add useGame hook
-  const { 
+  const {
     startGame,
     isProcessing: gameActionProcessing,
     error: gameActionError,
     currentStep,
-    resetGameState 
+    resetGameState,
   } = useGame();
-  
+
   // Zustand store
   const {
     currentGame,
@@ -43,8 +46,9 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
     startGame: storeStartGame,
     endGame: storeEndGame,
   } = useAppStore();
-
-const {refetch:fetchGameData}=UseGameData()
+  const { nextRound } = useNextRound();
+  const { refetch: fetchGameData } = UseGameData();
+  const { refetch: fetchMarketData } = useMarket();
   // Unified actions
   const { executeAction, isProcessing } = useUnifiedActions();
 
@@ -53,54 +57,91 @@ const {refetch:fetchGameData}=UseGameData()
   const [currentPlayer, setCurrentPlayer] = useState<any>(null);
   const [isHost, setIsHost] = useState(false);
   const [notifications, setNotifications] = useState<string[]>([]);
-  const [targetPlayer, setTargetPlayer] = useState<string>('');
+  const [targetPlayer, setTargetPlayer] = useState<string>("");
   const [gameIdCopied, setGameIdCopied] = useState(false);
 
   async function updateGamedata() {
     console.log("updating gamedata");
-    
-      await fetchGameData();
-      console.log("gamedata updated");
+
+    await fetchGameData();
+    console.log("gamedata updated");
+  }
+
+  async function updateMarketdata() {
+    console.log("updating Market data");
+
+    await fetchMarketData();
+    console.log("Market data updated");
   }
   // Socket event listeners
   useEffect(() => {
     if (!socket) return;
+    socket.on("round-ended", async (data) => {
+      try {
+        addNotification("Advancing to next round...");
+        if (isHost) {
+          const result = await nextRound(currentGame?.id!);
+          if (result.success) {
+            addNotification(`Round ${data.round} started!`);
+          } else {
+            addNotification(`Failed to advance round: ${result.error}`);
+          }
+        }
 
-    socket.on('game-state', (state: any) => {
+        // Wait 5 seconds then fetch market data
+        setTimeout(async () => {
+          await updateMarketdata();
+          addNotification("Market data updated");
+
+          // Send updated market prices to server
+          if (market && socket) {
+            socket.emit("update-market-prices", {
+              gameId,
+              marketPrices: market,
+            });
+          }
+        }, 6500);
+      } catch (error) {
+        addNotification(`Round advancement failed: ${error}`);
+      }
+    });
+
+    socket.on("game-state", (state: any) => {
       // console.log(state);
-      
+
       setGameState(state);
-      
-      if (state?.status === 'playing' && !gameStarted) {
+
+      if (state?.status === "playing" && !gameStarted) {
         storeStartGame();
       }
-      if (state?.status !== 'playing' && gameStarted) {
+      if (state?.status !== "playing" && gameStarted) {
         storeEndGame();
       }
     });
 
-    socket.on('game-started',async () => {
-      await updateGamedata;
-      playSound('switch');
-      addNotification('Game started!');
+    socket.on("game-started", async () => {
+      await updateGamedata();
+      playSound("switch");
+      addNotification("Game started!");
     });
 
-    socket.on('game-finished', () => {
-      playSound('action');
-      addNotification('Game finished!');
+    socket.on("game-finished", () => {
+      playSound("action");
+      addNotification("Game finished!");
     });
 
     return () => {
-      socket.off('game-state');
-      socket.off('game-started');
-      socket.off('game-finished');
+      socket.off("game-state");
+      socket.off("game-started");
+      socket.off("game-finished");
+      socket.off("next-round");
     };
   }, [socket, gameStarted, storeStartGame, storeEndGame]);
 
   // Update current player and host status
   useEffect(() => {
     if (!gameState || !playerId) return;
-    
+
     const player = gameState.players?.find((p: any) => p.id === playerId);
     setCurrentPlayer(player || null);
     setIsHost(gameState.host === playerId);
@@ -114,42 +155,41 @@ const {refetch:fetchGameData}=UseGameData()
   }, [gameActionError]);
 
   const addNotification = (message: string) => {
-    setNotifications(prev => [message, ...prev.slice(0, 2)]);
+    setNotifications((prev) => [message, ...prev.slice(0, 2)]);
     setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n !== message));
+      setNotifications((prev) => prev.filter((n) => n !== message));
     }, 3000);
   };
 
   const handleStartGame = async () => {
-     console.log(currentGame?.id);
-     
+    console.log(currentGame?.id);
+
     try {
-      
-      
-      addNotification('Starting game on blockchain...');
-      
+      addNotification("Starting game on blockchain...");
+
       // Start game on blockchain first
       const result = await startGame(currentGame?.id!);
-      
+
       if (result.success) {
         // Then emit to socket for real-time updates
-        socket?.emit('start-game');
-        addNotification('Game started successfully!');
-        playSound('switch');
+        socket?.emit("start-game");
+        addNotification("Game started successfully!");
+        playSound("switch");
       } else {
         addNotification(`Failed to start game: ${result.error}`);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       addNotification(`Failed to start game: ${errorMessage}`);
     }
   };
 
   const handleExitGame = () => {
     if (socket && gameId && playerId) {
-      socket.emit('exit-game', { gameId, playerId });
+      socket.emit("exit-game", { gameId, playerId });
     }
-    
+
     // Reset game action state when exiting
     resetGameState();
     clearGameInfo();
@@ -157,16 +197,14 @@ const {refetch:fetchGameData}=UseGameData()
   };
 
   const handlePlayerAction = async () => {
-    
-    console.log("Action call",selectedAction,selectedAsset);
+    console.log("Action call", selectedAction, selectedAsset);
     if (!selectedAction || !selectedAsset) return;
-
 
     try {
       const result = await executeAction(
         selectedAction,
         selectedAsset,
-        selectedAction === 'Sabotage' ? targetPlayer : undefined
+        selectedAction === "Sabotage" ? targetPlayer : undefined
       );
 
       if (result.success) {
@@ -175,11 +213,15 @@ const {refetch:fetchGameData}=UseGameData()
         addNotification(`${selectedAction} failed: ${result.error}`);
       }
     } catch (error) {
-      addNotification(`Action failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addNotification(
+        `Action failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
 
     // Reset target player
-    setTargetPlayer('');
+    setTargetPlayer("");
   };
 
   // Loading states
@@ -241,18 +283,18 @@ const {refetch:fetchGameData}=UseGameData()
         try {
           await navigator.clipboard.writeText(gameId);
           setGameIdCopied(true);
-          addNotification('Game ID copied to clipboard!');
-          
+          addNotification("Game ID copied to clipboard!");
+
           // Reset the copied state after 2 seconds
           setTimeout(() => {
             setGameIdCopied(false);
           }, 2000);
         } catch (err) {
-          console.error('Failed to copy game ID:', err);
-          addNotification('Failed to copy Game ID');
+          console.error("Failed to copy game ID:", err);
+          addNotification("Failed to copy Game ID");
         }
       } else {
-        addNotification('No Game ID to copy');
+        addNotification("No Game ID to copy");
       }
     };
 
@@ -277,24 +319,51 @@ const {refetch:fetchGameData}=UseGameData()
             {/* Left Half - Game Details */}
             <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-pixel-lg font-bold text-pixel-primary">Game Info</h3>
+                <h3 className="text-pixel-lg font-bold text-pixel-primary">
+                  Game Info
+                </h3>
                 <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-pixel-success pixel-notification border-pixel-success" title="Live Sync Active"></div>
-                  <span className="text-pixel-xs text-pixel-success font-bold">LIVE</span>
+                  <div
+                    className="w-2 h-2 bg-pixel-success pixel-notification border-pixel-success"
+                    title="Live Sync Active"
+                  ></div>
+                  <span className="text-pixel-xs text-pixel-success font-bold">
+                    LIVE
+                  </span>
                 </div>
               </div>
               <div className="space-y-2 text-pixel-base-gray">
-                <p><span className="text-pixel-primary">Game Name:</span> {gameState?.gameName || 'Unnamed Game'}</p>
-                <p><span className="text-pixel-primary">Game ID:</span> {gameId}</p>
-                <p><span className="text-pixel-primary">Host:</span> {isHost ? 'You' : gameState?.players?.find((p: any) => p.id === gameState.host)?.name || 'Unknown'}</p>
-                <p><span className="text-pixel-primary">Players:</span> {gameState?.players?.length || 0}/4</p>
-                <p><span className="text-pixel-primary">Status:</span> Waiting for players</p>
+                <p>
+                  <span className="text-pixel-primary">Game Name:</span>{" "}
+                  {gameState?.gameName || "Unnamed Game"}
+                </p>
+                <p>
+                  <span className="text-pixel-primary">Game ID:</span> {gameId}
+                </p>
+                <p>
+                  <span className="text-pixel-primary">Host:</span>{" "}
+                  {isHost
+                    ? "You"
+                    : gameState?.players?.find(
+                        (p: any) => p.id === gameState.host
+                      )?.name || "Unknown"}
+                </p>
+                <p>
+                  <span className="text-pixel-primary">Players:</span>{" "}
+                  {gameState?.players?.length || 0}/4
+                </p>
+                <p>
+                  <span className="text-pixel-primary">Status:</span> Waiting
+                  for players
+                </p>
               </div>
             </div>
 
             {/* Right Half - How to Invite */}
             <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6">
-              <h3 className="text-pixel-lg font-bold text-pixel-primary mb-4">How to Invite</h3>
+              <h3 className="text-pixel-lg font-bold text-pixel-primary mb-4">
+                How to Invite
+              </h3>
               <div className="space-y-2 text-pixel-base-gray text-pixel-sm">
                 <p>1. Share the Game ID with friends</p>
                 <p>2. They join using "Join by ID"</p>
@@ -304,12 +373,12 @@ const {refetch:fetchGameData}=UseGameData()
                 onClick={handleCopyGameId}
                 disabled={gameIdCopied}
                 className={`mt-4 w-full px-4 py-2 font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider transition-colors ${
-                  gameIdCopied 
-                    ? 'bg-pixel-success text-pixel-black' 
-                    : 'bg-pixel-accent hover:bg-pixel-success text-pixel-black'
+                  gameIdCopied
+                    ? "bg-pixel-success text-pixel-black"
+                    : "bg-pixel-accent hover:bg-pixel-success text-pixel-black"
                 }`}
               >
-                {gameIdCopied ? 'Copied!' : 'Copy Game ID'}
+                {gameIdCopied ? "Copied!" : "Copy Game ID"}
               </button>
             </div>
           </div>
@@ -321,10 +390,13 @@ const {refetch:fetchGameData}=UseGameData()
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {gameState.players?.map((player: any) => (
-                <div key={player.id} className="bg-pixel-gray pixel-panel border-pixel-light-gray p-4">
+                <div
+                  key={player.id}
+                  className="bg-pixel-gray pixel-panel border-pixel-light-gray p-4"
+                >
                   <div className="flex items-center justify-between">
                     <span className="text-pixel-primary font-bold">
-                      {player.name} {player.id === playerId && '(You)'}
+                      {player.name} {player.id === playerId && "(You)"}
                     </span>
                     {player.id === gameState.host && (
                       <span className="text-pixel-xs bg-pixel-warning text-pixel-black px-2 py-1 pixel-notification">
@@ -359,15 +431,16 @@ const {refetch:fetchGameData}=UseGameData()
             <div className="text-center">
               <button
                 onClick={handleStartGame}
-                disabled={(gameState.players?.length || 0) < 2 || gameActionProcessing}
+                disabled={
+                  (gameState.players?.length || 0) < 2 || gameActionProcessing
+                }
                 className="px-8 py-4 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-lg pixel-btn disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {gameActionProcessing 
-                  ? 'Starting Game...' 
-                  : (gameState.players?.length || 0) < 2 
-                    ? 'Need 2+ Players' 
-                    : 'Start Game'
-                }
+                {gameActionProcessing
+                  ? "Starting Game..."
+                  : (gameState.players?.length || 0) < 2
+                  ? "Need 2+ Players"
+                  : "Start Game"}
               </button>
             </div>
           )}
@@ -376,10 +449,9 @@ const {refetch:fetchGameData}=UseGameData()
             <div className="text-center">
               <div className="bg-pixel-warning pixel-panel border-pixel-black p-4">
                 <p className="text-pixel-black font-bold">
-                  {gameActionProcessing 
-                    ? 'Host is starting the game...' 
-                    : 'Waiting for host to start the game...'
-                  }
+                  {gameActionProcessing
+                    ? "Host is starting the game..."
+                    : "Waiting for host to start the game..."}
                 </p>
               </div>
             </div>
@@ -395,7 +467,9 @@ const {refetch:fetchGameData}=UseGameData()
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-pixel-xl font-bold text-pixel-primary">Trading Game</h1>
+          <h1 className="text-pixel-xl font-bold text-pixel-primary">
+            Trading Game
+          </h1>
           <div className="flex items-center space-x-4">
             <div className="text-pixel-base-gray font-bold bg-pixel-dark-gray border-pixel-gray px-3 py-1 pixel-panel">
               Round {gameState.currentRound}/{gameState.maxRounds}
@@ -414,14 +488,16 @@ const {refetch:fetchGameData}=UseGameData()
           {/* Left Column */}
           <div className="lg:col-span-3 space-y-4">
             <Timer timeRemaining={gameState.timeRemaining} />
-            <AssetsList assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }} />
+            <AssetsList
+              assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }}
+            />
           </div>
 
           {/* Middle Column */}
           <div className="lg:col-span-6 space-y-4">
-            <PlayerWallet 
-              tokens={currentPlayer?.tokens || 0} 
-              assets={inventory} 
+            <PlayerWallet
+              tokens={currentPlayer?.tokens || 0}
+              assets={inventory}
             />
             <PlayerStats players={gameState.players || []} />
           </div>
@@ -429,14 +505,24 @@ const {refetch:fetchGameData}=UseGameData()
           {/* Right Column */}
           <div className="lg:col-span-3 space-y-4">
             <ActionPanel
-              selectedAction={selectedAction || 'Buy'}
-              selectedResource={selectedAsset || 'Gold'}
+              selectedAction={selectedAction || "Buy"}
+              selectedResource={selectedAsset || "Gold"}
               amount={1}
               targetPlayer={targetPlayer}
               players={gameState.players || []}
-              currentPlayer={currentPlayer || { id: '', name: '', tokens: 0, assets: { gold: 0, water: 0, oil: 0 }, totalAssets: 0 }}
+              currentPlayer={
+                currentPlayer || {
+                  id: "",
+                  name: "",
+                  tokens: 0,
+                  assets: { gold: 0, water: 0, oil: 0 },
+                  totalAssets: 0,
+                }
+              }
               onActionChange={(action: ActionType) => setSelectedAction(action)}
-              onResourceChange={(resource: AssetType) => setSelectedAsset(resource)}
+              onResourceChange={(resource: AssetType) =>
+                setSelectedAsset(resource)
+              }
               onAmountChange={() => {}} // Fixed amount of 1
               onTargetChange={setTargetPlayer}
               onConfirmAction={handlePlayerAction}
@@ -446,10 +532,14 @@ const {refetch:fetchGameData}=UseGameData()
             {(isProcessing || gameActionProcessing) && (
               <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-4">
                 <div className="text-pixel-sm font-bold text-pixel-primary mb-2">
-                  {gameActionProcessing ? 'Blockchain Processing...' : 'Processing...'}
+                  {gameActionProcessing
+                    ? "Blockchain Processing..."
+                    : "Processing..."}
                 </div>
                 <div className="text-pixel-xs text-pixel-warning">
-                  {gameActionProcessing ? 'Transaction in progress' : 'Action in progress'}
+                  {gameActionProcessing
+                    ? "Transaction in progress"
+                    : "Action in progress"}
                 </div>
               </div>
             )}
@@ -460,7 +550,10 @@ const {refetch:fetchGameData}=UseGameData()
         {notifications.length > 0 && (
           <div className="fixed top-4 right-4 space-y-2 z-50">
             {notifications.map((notification, index) => (
-              <div key={index} className="bg-pixel-accent text-pixel-black p-3 pixel-panel border-pixel-black">
+              <div
+                key={index}
+                className="bg-pixel-accent text-pixel-black p-3 pixel-panel border-pixel-black"
+              >
                 <p className="font-bold text-pixel-sm">{notification}</p>
               </div>
             ))}

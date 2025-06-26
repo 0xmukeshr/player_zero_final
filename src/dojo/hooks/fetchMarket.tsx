@@ -65,7 +65,7 @@ const toBigNumberish = (value: string | number): string => {
 };
 
 // Function to fetch market data from GraphQL
-const fetchMarketData = async (gameId: BigNumberish): Promise<Market | null> => {
+const fetchMarketData = async (gameId: string): Promise<Market | null> => {
   try {
     console.log("🔍 Fetching market data for game:", gameId);
 
@@ -74,7 +74,7 @@ const fetchMarketData = async (gameId: BigNumberish): Promise<Market | null> => 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         query: MARKET_QUERY,
-        variables: { gameId: Number(gameId) }
+        variables: { gameId: gameId }
       }),
     });
 
@@ -138,7 +138,7 @@ export const useMarket = (gameId?: BigNumberish): UseMarketReturn => {
 
   // Use provided gameId or current game's id
   const activeGameId = useMemo(() => {
-    return gameId || currentGame?.id;
+    return currentGame?.id;
   }, [gameId, currentGame?.id]);
 
   const refetch = useCallback(async () => {

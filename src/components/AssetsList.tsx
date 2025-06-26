@@ -56,44 +56,50 @@ export function AssetsList({ assets }: AssetsListProps) {
   };
 
   const assetData = [
-    { name: 'Gold', value: assets.gold, total: 100, color: 'text-pixel-yellow', bgColor: 'bg-pixel-yellow', borderColor: 'border-pixel-yellow' },
-    { name: 'Water', value: assets.water, total: 50, color: 'text-pixel-blue', bgColor: 'bg-pixel-blue', borderColor: 'border-pixel-blue' },
-    { name: 'Oil', value: assets.oil, total: 20, color: 'text-pixel-magenta', bgColor: 'bg-pixel-magenta', borderColor: 'border-pixel-magenta' }
+    { name: 'Gold', value: assets.gold, total: 100, color: 'text-yellow-400', bgColor: 'bg-yellow-400', borderColor: 'border-yellow-400' },
+    { name: 'Water', value: assets.water, total: 50, color: 'text-blue-400', bgColor: 'bg-blue-400', borderColor: 'border-blue-400' },
+    { name: 'Oil', value: assets.oil, total: 20, color: 'text-purple-400', bgColor: 'bg-purple-400', borderColor: 'border-purple-400' }
   ];
 
   return (
-    <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-2 max-w-xs">
-      <h3 className="text-pixel-xs font-bold text-pixel-primary mb-2 uppercase tracking-wider text-center">Assets</h3>
+    <div className="bg-gray-800 border border-gray-600 p-4 max-w-sm">
+      <h3 className="text-sm font-bold text-white mb-3 uppercase tracking-wider text-center">Market</h3>
       
-      <div className="space-y-1">
+      <div className="space-y-3">
         {assetData.map((asset) => {
           const trend = getMarketTrend(asset.name);
+          const currentPrice = BigNumberUtils.toNumber(getAssetPrice(asset.name as AssetType));
+          
           return (
-            <div key={asset.name} className={`pixel-card bg-pixel-gray ${asset.borderColor} p-3`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-1">
-                  <div className={`w-4 h-4 ${asset.bgColor} pixel-avatar flex items-center justify-center`}>
-                    <Circle className={`w-2 h-2 text-pixel-black fill-current`} />
+            <div key={asset.name} className={`bg-gray-700 ${asset.borderColor} border p-3`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <div className={`w-4 h-4 ${asset.bgColor} rounded-full flex items-center justify-center`}>
+                    <Circle className={`w-2 h-2 text-gray-800 fill-current`} />
                   </div>
-                  <div className="flex items-center space-x-1">
-                    <div className="text-pixel-primary font-bold text-pixel-xs uppercase">{asset.name}</div>
-                    {trend && (
-                      <div className="flex items-center space-x-1">
-                        {trend.change >= 0 ? (
-                          <TrendingUp className="w-5 h-5 text-pixel-success" />
-                        ) : (
-                          <TrendingDown className="w-5 h-5 text-pixel-error" />
-                        )}
-                        <span className={`text-pixel-xs font-bold ${
-                          trend.change >= 0 ? 'text-pixel-success' : 'text-pixel-error'
-                        }`}>
-                          {trend.percentage}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                  <div className="text-white font-bold text-sm uppercase">{asset.name}</div>
                 </div>
-                <div className={`${asset.color} font-bold text-pixel-xs`}>{asset.value}</div>
+                <div className={`${asset.color} font-bold text-sm`}>{asset.value}</div>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="text-gray-300 text-xs">
+                  Price: <span className="text-white font-semibold">${currentPrice.toLocaleString()}</span>
+                </div>
+                {trend && (
+                  <div className="flex items-center space-x-1">
+                    {trend.change >= 0 ? (
+                      <TrendingUp className="w-6 h-6 text-green-400" />
+                    ) : (
+                      <TrendingDown className="w-6 h-6 text-red-400" />
+                    )}
+                    <span className={`text-xs font-bold ${
+                      trend.change >= 0 ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {trend.percentage}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           );

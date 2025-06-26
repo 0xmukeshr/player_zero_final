@@ -68,6 +68,7 @@ export const useUnifiedActions = (): UseUnifiedActionsReturn => {
         case 'Buy':
           console.log("buying 1",canBuyAsset);
           if (canBuyAsset) {
+            
             await executeBuyAsset(assetType);
             dojoSuccess = true;
             console.log(`✅ Dojo ${actionType} executed successfully`);
