@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Timer } from "./Timer";
 import { PlayerWallet } from "./PlayerWallet";
 import { AssetsList } from "./AssetsList";
@@ -7,7 +7,7 @@ import { ActionPanel } from "./ActionPanelSimple";
 import { GameErrorBoundary } from "./GameErrorBoundary";
 import { useSocket } from "../context/SocketContext";
 import { useAudio } from "../hooks/useAudio";
-import { useGame } from "../dojo/hooks/useGame"; //
+import { useGame } from "../dojo/hooks/useGame";
 import useAppStore, { AssetType, ActionType } from "../zustand/store";
 import { useUnifiedActions } from "../hooks/useUnifiedActions";
 import { UseGameData } from "../dojo/hooks/fetchGame";
@@ -49,6 +49,7 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
   const { nextRound } = useNextRound();
   const { refetch: fetchGameData } = UseGameData();
   const { refetch: fetchMarketData } = useMarket();
+  
   // Unified actions
   const { executeAction, isProcessing } = useUnifiedActions();
 
@@ -60,25 +61,74 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
   const [targetPlayer, setTargetPlayer] = useState<string>("");
   const [gameIdCopied, setGameIdCopied] = useState(false);
 
-  async function updateGamedata() {
+  // Loading states to prevent multiple updates
+  const [isUpdatingGameData, setIsUpdatingGameData] = useState(false);
+  const [isUpdatingMarketData, setIsUpdatingMarketData] = useState(false);
+  
+  // Refs to track update states and prevent duplicates
+  const gameDataUpdateRef = useRef<boolean>(false);
+  const marketDataUpdateRef = useRef<boolean>(false);
+  const lastRoundProcessedRef = useRef<number>(-1);
+
+  // Debounced update functions
+  const updateGamedata = useCallback(async () => {
+    if (isUpdatingGameData || gameDataUpdateRef.current) {
+      console.log("Game data update already in progress, skipping...");
+      return;
+    }
+
     console.log("updating gamedata");
+    setIsUpdatingGameData(true);
+    gameDataUpdateRef.current = true;
 
-    await fetchGameData(currentGame?.id);
-    console.log("gamedata updated");
-  }
+    try {
+      await fetchGameData(currentGame?.id);
+      console.log("gamedata updated");
+    } catch (error) {
+      console.error("Failed to update game data:", error);
+    } finally {
+      setIsUpdatingGameData(false);
+      gameDataUpdateRef.current = false;
+    }
+  }, [fetchGameData, currentGame?.id, isUpdatingGameData]);
 
-  async function updateMarketdata() {
+  const updateMarketdata = useCallback(async () => {
+    if (isUpdatingMarketData || marketDataUpdateRef.current) {
+      console.log("Market data update already in progress, skipping...");
+      return;
+    }
+
     console.log("updating Market data");
+    setIsUpdatingMarketData(true);
+    marketDataUpdateRef.current = true;
 
-    await fetchMarketData(currentGame?.id);
-    console.log("Market data updated");
-  }
+    try {
+      await fetchMarketData(currentGame?.id);
+      console.log("Market data updated");
+    } catch (error) {
+      console.error("Failed to update market data:", error);
+    } finally {
+      setIsUpdatingMarketData(false);
+      marketDataUpdateRef.current = false;
+    }
+  }, [fetchMarketData, currentGame?.id, isUpdatingMarketData]);
+
   // Socket event listeners
   useEffect(() => {
     if (!socket) return;
-    socket.on("round-ended", async (data) => {
+
+    const handleRoundEnded = async (data: any) => {
+      // Prevent duplicate processing of the same round
+      if (lastRoundProcessedRef.current >= data.round) {
+        console.log(`Round ${data.round} already processed, skipping...`);
+        return;
+      }
+
+      lastRoundProcessedRef.current = data.round;
+
       try {
         addNotification("Advancing to next round...");
+        
         if (isHost) {
           const result = await nextRound(currentGame?.id!);
           if (result.success) {
@@ -88,12 +138,12 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
           }
         }
 
-        // Wait 5 seconds then fetch market data
+        // Wait 6.5 seconds then fetch market data (only once per round)
         setTimeout(async () => {
           await updateMarketdata();
           addNotification("Market data updated");
-        }, 6500);
 
+        }, 6500);
 
         // Send updated market prices to server
           if (market && socket) {
@@ -105,11 +155,9 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
       } catch (error) {
         addNotification(`Round advancement failed: ${error}`);
       }
-    });
+    };
 
-    socket.on("game-state", (state: any) => {
-      // console.log(state);
-
+    const handleGameState = (state: any) => {
       setGameState(state);
 
       if (state?.status === "playing" && !gameStarted) {
@@ -118,26 +166,45 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
       if (state?.status !== "playing" && gameStarted) {
         storeEndGame();
       }
-    });
+    };
 
-    socket.on("game-started", async () => {
+    const handleGameStarted = async () => {
       await updateGamedata();
       playSound("switch");
       addNotification("Game started!");
-    });
+    };
 
-    socket.on("game-finished", () => {
+    const handleGameFinished = () => {
       playSound("action");
       addNotification("Game finished!");
-    });
+    };
+
+    // Add event listeners
+    socket.on("round-ended", handleRoundEnded);
+    socket.on("game-state", handleGameState);
+    socket.on("game-started", handleGameStarted);
+    socket.on("game-finished", handleGameFinished);
 
     return () => {
-      socket.off("game-state");
-      socket.off("game-started");
-      socket.off("game-finished");
-      socket.off("next-round");
+      socket.off("round-ended", handleRoundEnded);
+      socket.off("game-state", handleGameState);
+      socket.off("game-started", handleGameStarted);
+      socket.off("game-finished", handleGameFinished);
     };
-  }, [socket, gameStarted, storeStartGame, storeEndGame]);
+  }, [
+    socket, 
+    gameStarted, 
+    storeStartGame, 
+    storeEndGame, 
+    isHost, 
+    currentGame?.id, 
+    nextRound, 
+    updateGamedata, 
+    updateMarketdata, 
+    market, 
+    gameId, 
+    playSound
+  ]);
 
   // Update current player and host status
   useEffect(() => {
@@ -194,6 +261,12 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
     // Reset game action state when exiting
     resetGameState();
     clearGameInfo();
+    
+    // Reset refs
+    gameDataUpdateRef.current = false;
+    marketDataUpdateRef.current = false;
+    lastRoundProcessedRef.current = -1;
+    
     onExitGame();
   };
 
@@ -410,23 +483,6 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
             </div>
           </div>
 
-          {/* Blockchain Action Status */}
-          {/* {gameActionProcessing && (
-            <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6 mb-6">
-              <h3 className="text-pixel-lg font-bold text-pixel-warning mb-2">
-                Processing on Blockchain...
-              </h3>
-              <div className="space-y-2">
-                <p className="text-pixel-base-gray">
-                  Step: <span className="text-pixel-primary font-bold">{currentStep}</span>
-                </p>
-                <div className="bg-pixel-gray h-2 rounded-full overflow-hidden">
-                  <div className="bg-pixel-primary h-full animate-pulse" style={{ width: '60%' }}></div>
-                </div>
-              </div>
-            </div>
-          )} */}
-
           {/* Start Game Button */}
           {isHost && (
             <div className="text-center">
@@ -530,16 +586,22 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
             />
 
             {/* Processing Status */}
-            {(isProcessing || gameActionProcessing) && (
+            {(isProcessing || gameActionProcessing || isUpdatingGameData || isUpdatingMarketData) && (
               <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-4">
                 <div className="text-pixel-sm font-bold text-pixel-primary mb-2">
                   {gameActionProcessing
                     ? "Blockchain Processing..."
+                    : isUpdatingGameData
+                    ? "Updating Game Data..."
+                    : isUpdatingMarketData
+                    ? "Updating Market Data..."
                     : "Processing..."}
                 </div>
                 <div className="text-pixel-xs text-pixel-warning">
                   {gameActionProcessing
                     ? "Transaction in progress"
+                    : isUpdatingGameData || isUpdatingMarketData
+                    ? "Data sync in progress"
                     : "Action in progress"}
                 </div>
               </div>
