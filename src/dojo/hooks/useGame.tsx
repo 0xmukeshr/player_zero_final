@@ -6,6 +6,7 @@ import { useDojoSDK } from "@dojoengine/sdk/react";
 import { useStarknetConnect } from "./useStarknetConnect";
 import { usePlayer } from "./usePlayer";
 import useAppStore from "../../zustand/store";
+import { UseGameData } from "./fetchGame";
 
 // Configuration
 const DEFAULT_TIMEOUT = 5000; // 5 seconds instead of hardcoded 3.5s
@@ -70,14 +71,18 @@ const extractGameIdFromReceipt = (receipt: TransactionReceipt): BigNumberish | n
 // Validation helper
 const validateGameAction = (status: string, account: any, player: any): string | null => {
   if (status !== "connected") {
+    console.log("Controller not connected. Please connect your controller first.");
+    
     return "Controller not connected. Please connect your controller first.";
   }
   
   if (!account) {
+    console.log("No account found. Please connect your controller.");
     return "No account found. Please connect your controller.";
   }
   
   if (!player) {
+    console.log("Player not found. Please initialize your player first.");
     return "Player not found. Please initialize your player first.";
   }
   
@@ -97,7 +102,7 @@ export const useGame = () => {
     startGame: setGameStarted,
     endGame 
   } = useAppStore();
-
+const {refetch:fetchGameData}=UseGameData()
   // Refs for cleanup
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const transactionIdRef = useRef<string | null>(null);
@@ -313,15 +318,15 @@ export const useGame = () => {
   /**
    * Joins an existing game
    */
-  const joinGame = useCallback(async (gameId: BigNumberish, playerName: BigNumberish): Promise<GameActionResponse> => {
+  const joinGame = useCallback(async (gameId: string, playerName: string): Promise<GameActionResponse> => {
     if (gameState.isProcessing) {
       return { success: false, error: "Already processing a game action" };
     }
 
-    const validationError = validateGameAction(status, account, player);
-    if (validationError) {
-      return { success: false, error: validationError };
-    }
+    // const validationError = validateGameAction(status, account, player);
+    // if (validationError) {
+    //   return { success: false, error: validationError };
+    // }
 
     const transactionId = uuidv4();
     transactionIdRef.current = transactionId;
@@ -370,7 +375,7 @@ export const useGame = () => {
       // Confirm transaction
       dojoState.confirmTransaction(transactionId);
       transactionIdRef.current = null;
-
+      await fetchGameData()
       setGameState(prev => ({
         ...prev,
         completed: true,
@@ -392,15 +397,18 @@ export const useGame = () => {
   /**
    * Starts an existing game
    */
-  const startGame = useCallback(async (gameId: BigNumberish): Promise<GameActionResponse> => {
+  const startGame = useCallback(async (gameId: string): Promise<GameActionResponse> => {
+   
     if (gameState.isProcessing) {
       return { success: false, error: "Already processing a game action" };
     }
+ 
 
     const validationError = validateGameAction(status, account, player);
     if (validationError) {
       return { success: false, error: validationError };
     }
+  
 
     const transactionId = uuidv4();
     transactionIdRef.current = transactionId;
@@ -422,8 +430,7 @@ export const useGame = () => {
         () => client.actions.startGame(account as Account, gameId),
         'starting',
         'Game started'
-      );
-
+      ); 
       if (!success || !txResponse) {
         return handleError(new Error(error || 'Transaction failed'), "Failed to start game", transactionId);
       }

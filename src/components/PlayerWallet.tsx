@@ -1,15 +1,11 @@
 import React from 'react';
 import { DollarSign, Circle } from 'lucide-react';
-import useAppStore from '../zustand/store';
+import useAppStore, { Inventory } from '../zustand/store';
 import { BigNumberUtils } from '../zustand/store';
 
 interface PlayerWalletProps {
   tokens: number;
-  assets: {
-    gold: number;
-    water: number;
-    oil: number;
-  };
+  assets: Inventory | null;
 }
 
 export function PlayerWallet({ tokens, assets }: PlayerWalletProps) {
@@ -38,7 +34,7 @@ export function PlayerWallet({ tokens, assets }: PlayerWalletProps) {
               </div>
               <div className="text-pixel-primary font-bold text-pixel-xs uppercase">Gold</div>
             </div>
-            <div className="text-pixel-yellow font-bold text-pixel-base">{assets.gold}</div>
+            <div className="text-pixel-yellow font-bold text-pixel-base">{Number(assets?.gold)}</div>
           </div>
         </div>
 
@@ -50,7 +46,7 @@ export function PlayerWallet({ tokens, assets }: PlayerWalletProps) {
               </div>
               <div className="text-pixel-primary font-bold text-pixel-xs uppercase">Water</div>
             </div>
-            <div className="text-pixel-blue font-bold text-pixel-base">{assets.water}</div>
+            <div className="text-pixel-blue font-bold text-pixel-base">{Number(assets?.water)}</div>
           </div>
         </div>
 
@@ -62,7 +58,7 @@ export function PlayerWallet({ tokens, assets }: PlayerWalletProps) {
               </div>
               <div className="text-pixel-primary font-bold text-pixel-xs uppercase">Oil</div>
             </div>
-            <div className="text-pixel-magenta font-bold text-pixel-base">{assets.oil}</div>
+            <div className="text-pixel-magenta font-bold text-pixel-base">{Number(assets?.oil)}</div>
           </div>
         </div>
       </div>

@@ -27,6 +27,7 @@ const activeGameStates = new Map();
 const players = new Map(); // socketId -> playerInfo
 const gameTimers = new Map(); // gameId -> timer objects
 const inactivityTimers = new Map(); // gameId -> inactivity timer
+const roundTimers = new Map(); // gameId -> round timer objects
 
 // Helper function to generate game ID
 function generateGameId() {
@@ -54,9 +55,12 @@ function createInitialGameState() {
       { resource: 'oil', change: 0, percentage: '+0%' }
     ],
     recentActions: [],
+    actionHistory: {}, // Store actions by round: { roundNumber: [actions] }
     status: 'waiting', // waiting, playing, finished
     host: null,
-    timerActive: false
+    timerActive: false,
+    roundInProgress: false,
+    nextRoundStartTime: null
   };
 }
 
@@ -401,49 +405,124 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Handle next round (host only)
+  socket.on('next-round', async () => {
+    try {
+      const playerInfo = players.get(socket.id);
+      if (!playerInfo) return;
+      
+      const game = activeGameStates.get(playerInfo.gameId);
+      if (!game || game.status !== 'playing') return;
+      
+      // Verify host
+      const isHost = (
+        game.host === playerInfo.playerId ||
+        game.players.find(p => p.id === playerInfo.playerId)?.walletAddress === game.players.find(p => p.id === game.host)?.walletAddress
+      );
+      
+      if (!isHost) {
+        socket.emit('error', { message: 'Only the host can advance to next round' });
+        return;
+      }
+      
+      // Move current round actions to action history
+      if (game.recentActions.length > 0) {
+        game.actionHistory[game.currentRound] = [...game.recentActions];
+      }
+      
+      // Advance to next round
+      game.currentRound += 1;
+      game.recentActions = [];
+      game.roundInProgress = false;
+      game.nextRoundStartTime = Date.now() + 10000;
+      
+      if (game.currentRound > game.maxRounds) {
+        await finishGame(playerInfo.gameId);
+        return;
+      }
+      
+      game.timeRemaining = { hours: 0, minutes: 1, seconds: 0 };
+      activeGameStates.set(playerInfo.gameId, game);
+      
+      io.to(playerInfo.gameId).emit('next-round', {
+        round: game.currentRound,
+        delay: 10000
+      });
+      
+      io.to(playerInfo.gameId).emit('game-state', game);
+      
+      setTimeout(() => {
+        const updatedGame = activeGameStates.get(playerInfo.gameId);
+        if (updatedGame && updatedGame.currentRound === game.currentRound) {
+          updatedGame.roundInProgress = true;
+          updatedGame.nextRoundStartTime = null;
+          activeGameStates.set(playerInfo.gameId, updatedGame);
+          
+          io.to(playerInfo.gameId).emit('round-started', {
+            round: updatedGame.currentRound
+          });
+          
+          io.to(playerInfo.gameId).emit('game-state', updatedGame);
+        }
+      }, 10000);
+      
+    } catch (error) {
+      console.error('Error handling next round:', error);
+      socket.emit('error', { message: 'Failed to advance to next round' });
+    }
+  });
+
   // Handle player actions
   socket.on('player-action', (data) => {
     const playerInfo = players.get(socket.id);
+    
     if (!playerInfo) return;
     
     const game = activeGameStates.get(playerInfo.gameId);
+     
     if (!game || game.status !== 'playing') return;
     
     // Reset inactivity timer since there's activity
     resetInactivityTimer(playerInfo.gameId);
     
     const { action, resource, amount, targetPlayer } = data;
+    console.log("Daaaatttttttttaaaaaaaaaadata",action, resource.toLowerCase(), amount, targetPlayer);
+    
     const player = game.players.find(p => p.id === playerInfo.playerId);
     
     if (!player) return;
     
     let actionText = '';
     const resourcePrices = { gold: 10, water: 15, oil: 25 };
-    const price = resourcePrices[resource] * amount;
+    const price = resourcePrices[resource.toLowerCase()] * amount;
     
     switch (action) {
-      case 'buy':
+      case 'Buy':
         if (player.tokens >= price) {
+          console.log("buying",resource.toLowerCase());
+          
           player.tokens -= price;
-          player.assets[resource] += amount;
+          player.assets[resource.toLowerCase()] += amount;
           actionText = `${player.name} bought ${amount} ${resource.charAt(0).toUpperCase() + resource.slice(1)} for ${price} tokens`;
         }
         break;
         
-      case 'sell':
-        if (player.assets[resource] >= amount) {
+      case 'Sell':
+        if (player.assets[resource.toLowerCase()] >= amount) {
+                    console.log("selling",resource.toLowerCase());
+
           const sellPrice = Math.floor(price * 0.8);
           player.tokens += sellPrice;
-          player.assets[resource] -= amount;
+          player.assets[resource.toLowerCase()] -= amount;
           actionText = `${player.name} sold ${amount} ${resource.charAt(0).toUpperCase() + resource.slice(1)} for ${sellPrice} tokens`;
         }
         break;
         
-      case 'burn':
-        if (player.assets[resource] >= amount) {
-          player.assets[resource] -= amount;
+      case 'Burn':
+        if (player.assets[resource.toLowerCase()] >= amount) {
+          player.assets[resource.toLowerCase()] -= amount;
           // Update market changes
-          const marketChange = game.marketChanges.find(m => m.resource === resource);
+          const marketChange = game.marketChanges.find(m => m.resource === resource.toLowerCase());
           if (marketChange) {
             marketChange.change += amount * 3;
             marketChange.percentage = `${marketChange.change > 0 ? '+' : ''}${marketChange.change}%`;
@@ -452,12 +531,12 @@ io.on('connection', (socket) => {
         }
         break;
         
-      case 'sabotage':
+      case 'Sabotage':
         if (player.tokens >= 100 && targetPlayer) {
           player.tokens -= 100;
           const target = game.players.find(p => p.name === targetPlayer);
           if (target) {
-            target.assets[resource] = Math.max(0, target.assets[resource] - amount);
+            target.assets[resource.toLowerCase()] = Math.max(0, target.assets[resource.toLowerCase()] - amount);
             target.totalAssets = target.assets.gold + target.assets.water + target.assets.oil;
             actionText = `${player.name} sabotaged ${target.name}'s ${resource.charAt(0).toUpperCase() + resource.slice(1)} reserves`;
           }
@@ -475,6 +554,8 @@ io.on('connection', (socket) => {
     }
     
     activeGameStates.set(playerInfo.gameId, game);
+    console.log("final state",game);
+    
     io.to(playerInfo.gameId).emit('game-state', game);
   });
 
@@ -509,6 +590,52 @@ io.on('connection', (socket) => {
     }
   });
 });
+
+// Helper function to finish game
+async function finishGame(gameId) {
+  try {
+    const game = activeGameStates.get(gameId);
+    if (!game) return;
+    
+    // Calculate final scores
+    const finalPlayers = game.players.map(player => {
+      const goldValue = player.assets.gold * 10;
+      const waterValue = player.assets.water * 15;
+      const oilValue = player.assets.oil * 25;
+      const finalScore = player.tokens + goldValue + waterValue + oilValue;
+      
+      return {
+        ...player,
+        finalScore
+      };
+    });
+    
+    // Sort by final score to determine winner
+    finalPlayers.sort((a, b) => b.finalScore - a.finalScore);
+    
+    game.status = 'finished';
+    game.timerActive = false;
+    game.winner = finalPlayers[0];
+    game.finalScores = finalPlayers;
+    
+    activeGameStates.set(gameId, game);
+    
+    // Update database
+    await GameDatabase.updateGameStatus(gameId, 'finished');
+    
+    // Notify all players
+    io.to(gameId).emit('game-finished', {
+      winner: game.winner,
+      finalScores: finalPlayers
+    });
+    
+    io.to(gameId).emit('game-state', game);
+    
+    
+  } catch (error) {
+    console.error('Error finishing game:', error);
+  }
+}
 
 // Helper function to remove player from game
 function removePlayerFromGame(gameId, playerId) {

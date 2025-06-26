@@ -30,7 +30,7 @@ export function PlayerStats({ players }: PlayerStatsProps) {
     const bPoints = b.finalScore || (b.tokens + (b.assets.gold * 10) + (b.assets.water * 15) + (b.assets.oil * 25));
     return bPoints - aPoints;
   });
-
+  
   const getRankIcon = (index: number) => {
     if (index === 0) return <TrendingUp className="w-3 h-3 text-pixel-success" />;
     if (index === sortedPlayers.length - 1) return <TrendingDown className="w-3 h-3 text-pixel-error" />;

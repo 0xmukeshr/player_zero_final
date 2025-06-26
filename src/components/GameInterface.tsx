@@ -1,769 +1,229 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Timer } from './Timer';
 import { PlayerWallet } from './PlayerWallet';
 import { AssetsList } from './AssetsList';
 import { PlayerStats } from './PlayerStats';
-import { ActionPanel } from './ActionPanel';
-import { RecentActions } from './RecentActions';
+import { ActionPanel } from './ActionPanelSimple';
+import { GameErrorBoundary } from './GameErrorBoundary';
 import { useSocket } from '../context/SocketContext';
 import { useAudio } from '../hooks/useAudio';
-
-// Import types and store from store.ts (which re-exports bindings)
-import useAppStore, { 
-  AssetType, 
-  ActionType, 
-  BigNumberUtils,
-  type Player,
-  type Game, 
-  type Inventory, 
-  type Market, 
-  type Action 
-} from '../zustand/store';
-
-// Dojo hooks
-import { useBuyAsset } from '../dojo/hooks/useBuyAsset';
-import { useSellAsset } from '../dojo/hooks/useSellAsset';
-import { useBurnAsset } from '../dojo/hooks/useBurnAsset';
-import { useSabotage } from '../dojo/hooks/useSabotage';
-import { useNextRound } from '../dojo/hooks/useNextRound';
-import { usePlayer } from '../dojo/hooks/usePlayer';
-import { useGame } from '../dojo/hooks/useGame';
-import { useMarket } from '../dojo/hooks/fetchMarket';
+import { useGame } from '../dojo/hooks/useGame'; //  
+import useAppStore, { AssetType, ActionType } from '../zustand/store';
+import { useUnifiedActions } from '../hooks/useUnifiedActions';
+import { UseGameData } from '../dojo/hooks/fetchGame';
 
 interface GameInterfaceProps {
   onExitGame: () => void;
 }
 
-export function GameInterface({ onExitGame }: GameInterfaceProps) {
+function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
   const { socket, connected, gameId, playerId, playerName, clearGameInfo } = useSocket();
-  
-  // Fallback to localStorage if gameId is not available from context
-  const [effectiveGameId, setEffectiveGameId] = useState<string | null>(null);
-  const [effectivePlayerId, setEffectivePlayerId] = useState<string | null>(null);
-  const [effectivePlayerName, setEffectivePlayerName] = useState<string | null>(null);
-  const [contextLoaded, setContextLoaded] = useState(false);
-  
-  // Initialize effective values from context or localStorage
-  useEffect(() => {
-    console.log('GameInterface: Context values update:', { gameId, playerId, playerName });
-    
-    // If context has values, use them
-    if (gameId && playerId && playerName) {
-      console.log('GameInterface: Using context values');
-      setEffectiveGameId(gameId);
-      setEffectivePlayerId(playerId);
-      setEffectivePlayerName(playerName);
-      setContextLoaded(true);
-      return;
-    }
-    
-    // If context doesn't have values, try localStorage
-    try {
-      const storedGameInfo = localStorage.getItem('currentGameInfo');
-      if (storedGameInfo) {
-        const { gameId: storedGameId, playerId: storedPlayerId, playerName: storedPlayerName } = JSON.parse(storedGameInfo);
-        console.log('GameInterface: Using stored game info:', { storedGameId, storedPlayerId, storedPlayerName });
-        
-        if (storedGameId && storedPlayerId) {
-          setEffectiveGameId(storedGameId);
-          setEffectivePlayerId(storedPlayerId);
-          setEffectivePlayerName(storedPlayerName || 'Unknown Player');
-          setContextLoaded(true);
-          return;
-        }
-      }
-    } catch (error) {
-      console.error('GameInterface: Error loading stored game info:', error);
-    }
-    
-    // If still no game info found, try to get from user profile and check for recently created games
-    try {
-      const userProfile = localStorage.getItem('userProfile');
-      if (userProfile) {
-        const profile = JSON.parse(userProfile);
-        console.log('GameInterface: User profile found:', profile.name);
-        
-        // Set at least the player name if we have it
-        if (profile.name) {
-          setEffectivePlayerName(profile.name);
-        }
-      }
-    } catch (error) {
-      console.error('GameInterface: Error loading user profile:', error);
-    }
-    
-    // Mark as loaded even if no values found to avoid infinite loading
-    setContextLoaded(true);
-  }, [gameId, playerId, playerName]);
   const { playSound } = useAudio();
   
-  // Use Zustand store for application state
+  // Add useGame hook
+  const { 
+    startGame,
+    isProcessing: gameActionProcessing,
+    error: gameActionError,
+    currentStep,
+    resetGameState 
+  } = useGame();
+  
+  // Zustand store
   const {
     currentGame,
     market,
-    player: dojoPlayerFromStore,
+    player,
     inventory,
     gameStarted,
     selectedAsset,
-    selectedAction: selectedActionFromStore,
-    isLoading,
-    error,
-    setCurrentGame,
-    setPlayer,
-    setInventory,
-    setMarket,
+    selectedAction,
     setSelectedAsset,
     setSelectedAction,
     startGame: storeStartGame,
     endGame: storeEndGame,
-    setLoading,
-    setError,
-    getAssetPrice,
-    getAssetAmount,
-    canAffordAsset,
-    getTotalPortfolioValue
   } = useAppStore();
-  
-  // Local UI state that doesn't need to persist
-  const [gameState, setGameState] = useState<any>(null); // Keep for socket-based game state
+
+const {refetch:fetchGameData}=UseGameData()
+  // Unified actions
+  const { executeAction, isProcessing } = useUnifiedActions();
+
+  // Local state - minimal
+  const [gameState, setGameState] = useState<any>(null);
+  const [currentPlayer, setCurrentPlayer] = useState<any>(null);
   const [isHost, setIsHost] = useState(false);
-  const [currentPlayer, setCurrentPlayer] = useState<any>(null); // Socket player data
-  const [selectedAction, setSelectedActionLocal] = useState<ActionType>('Buy');
-  const [selectedResource, setSelectedResource] = useState<AssetType>('Gold');
-  const [amount, setAmount] = useState<number>(1);
-  const [targetPlayer, setTargetPlayer] = useState<string>('');
   const [notifications, setNotifications] = useState<string[]>([]);
-  const [previousPlayerCount, setPreviousPlayerCount] = useState(0);
-  const [previousRecentActions, setPreviousRecentActions] = useState<string[]>([]);
-  const [showWinnerModal, setShowWinnerModal] = useState(false);
-  const [gameFinished, setGameFinished] = useState(false);
-  const [isLastThreeSeconds, setIsLastThreeSeconds] = useState(false);
-  
-  // Mobile UI state
-  const [activeTab, setActiveTab] = useState<'wallet' | 'assets' | 'actions' | 'stats'>('actions');
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [targetPlayer, setTargetPlayer] = useState<string>('');
 
-  // Track if we've already requested game state
-  const gameStateRequestedRef = useRef(false);
-  
-  // Handle orientation and screen size changes
-  useEffect(() => {
-    const handleResize = () => {
-      setIsLandscape(window.innerWidth > window.innerHeight);
-      setIsMobile(window.innerWidth < 768);
-    };
+  async function updateGamedata() {
+    console.log("updating gamedata");
     
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
-    
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
-    };
-  }, []);
-
-  // Initialize Dojo hooks with error handling
-  let buyAssetState, executeBuyAsset, canBuyAsset, resetBuyAssetState;
-  let sellAssetState, executeSellAsset, canSellAsset, resetSellAssetState;
-  let burnAssetState, executeBurnAsset, canBurnAsset, resetBurnAssetState;
-  let sabotageState, executeSabotage, canSabotage, resetSabotageState;
-  let nextRound, resetNextRoundState, nextRoundProcessing, nextRoundError, canAdvanceRound;
-  let dojoPlayer, playerLoading, playerError, refetchPlayer;
-  let dojoGame, createGame, joinGame, dojoStartGame, gameProcessing, gameError;
-  let dojoMarket, marketLoading, marketError, refetchMarket;
-
-  try {
-    const buyAssetHook = useBuyAsset();
-    buyAssetState = buyAssetHook.buyAssetState;
-    executeBuyAsset = buyAssetHook.executeBuyAsset;
-    canBuyAsset = buyAssetHook.canBuyAsset;
-    resetBuyAssetState = buyAssetHook.resetBuyAssetState;
-  } catch (error) {
-    console.error('Error initializing useBuyAsset:', error);
-    buyAssetState = { isLoading: false, error: null, txStatus: null, txHash: null };
-    executeBuyAsset = async () => {};
-    canBuyAsset = false;
-    resetBuyAssetState = () => {};
+      await fetchGameData();
+      console.log("gamedata updated");
   }
-
-  try {
-    const sellAssetHook = useSellAsset();
-    sellAssetState = sellAssetHook.sellAssetState;
-    executeSellAsset = sellAssetHook.executeSellAsset;
-    canSellAsset = sellAssetHook.canSellAsset;
-    resetSellAssetState = sellAssetHook.resetSellAssetState;
-  } catch (error) {
-    console.error('Error initializing useSellAsset:', error);
-    sellAssetState = { isLoading: false, error: null, txStatus: null, txHash: null };
-    executeSellAsset = async () => {};
-    canSellAsset = false;
-    resetSellAssetState = () => {};
-  }
-
-  try {
-    const burnAssetHook = useBurnAsset();
-    burnAssetState = burnAssetHook.burnAssetState;
-    executeBurnAsset = burnAssetHook.executeBurnAsset;
-    canBurnAsset = burnAssetHook.canBurnAsset;
-    resetBurnAssetState = burnAssetHook.resetBurnAssetState;
-  } catch (error) {
-    console.error('Error initializing useBurnAsset:', error);
-    burnAssetState = { isLoading: false, error: null, txStatus: null, txHash: null };
-    executeBurnAsset = async () => {};
-    canBurnAsset = false;
-    resetBurnAssetState = () => {};
-  }
-
-  try {
-    const sabotageHook = useSabotage();
-    sabotageState = sabotageHook.sabotageState;
-    executeSabotage = sabotageHook.executeSabotage;
-    canSabotage = sabotageHook.canSabotage;
-    resetSabotageState = sabotageHook.resetSabotageState;
-  } catch (error) {
-    console.error('Error initializing useSabotage:', error);
-    sabotageState = { isLoading: false, error: null, txStatus: null, txHash: null };
-    executeSabotage = async () => {};
-    canSabotage = false;
-    resetSabotageState = () => {};
-  }
-
-  try {
-    const nextRoundHook = useNextRound();
-    nextRound = nextRoundHook.nextRound;
-    resetNextRoundState = nextRoundHook.resetNextRoundState;
-    nextRoundProcessing = nextRoundHook.isProcessing;
-    nextRoundError = nextRoundHook.error;
-    canAdvanceRound = nextRoundHook.canAdvanceRound;
-  } catch (error) {
-    console.error('Error initializing useNextRound:', error);
-    nextRound = async () => ({ success: false, error: 'Hook failed' });
-    resetNextRoundState = () => {};
-    nextRoundProcessing = false;
-    nextRoundError = null;
-    canAdvanceRound = false;
-  }
-
-  try {
-    const playerHook = usePlayer();
-    dojoPlayer = playerHook.player;
-    playerLoading = playerHook.isLoading;
-    playerError = playerHook.error;
-    refetchPlayer = playerHook.refetch;
-  } catch (error) {
-    console.error('Error initializing usePlayer:', error);
-    dojoPlayer = null;
-    playerLoading = false;
-    playerError = null;
-    refetchPlayer = () => {};
-  }
-
-  try {
-    const gameHook = useGame();
-    dojoGame = gameHook.currentGame;
-    createGame = gameHook.createGame;
-    joinGame = gameHook.joinGame;
-    dojoStartGame = gameHook.startGame;
-    gameProcessing = gameHook.isProcessing;
-    gameError = gameHook.error;
-  } catch (error) {
-    console.error('Error initializing useGame:', error);
-    dojoGame = null;
-    createGame = async () => {};
-    joinGame = async () => {};
-    dojoStartGame = async () => {};
-    gameProcessing = false;
-    gameError = null;
-  }
-
-  try {
-    const marketHook = useMarket();
-    dojoMarket = marketHook.market;
-    marketLoading = marketHook.isLoading;
-    marketError = marketHook.error;
-    refetchMarket = marketHook.refetch;
-  } catch (error) {
-    console.error('Error initializing useMarket:', error);
-    dojoMarket = null;
-    marketLoading = false;
-    marketError = null;
-    refetchMarket = () => {};
-  }
-  
-  // Socket event listeners setup (only once)
+  // Socket event listeners
   useEffect(() => {
-    if (!socket) {
-      console.log('GameInterface: No socket available');
-      return;
-    }
-
-    console.log('GameInterface: Setting up socket event listeners');
+    if (!socket) return;
 
     socket.on('game-state', (state: any) => {
-      console.log('GameInterface: Received game state:', state);
-      if (state) {
-        setGameState(state);
-        // Don't set isHost here, it will be set in the separate effect
-        console.log('GameInterface: Game state set successfully');
-      } else {
-        console.error('GameInterface: Received null/undefined game state');
+      // console.log(state);
+      
+      setGameState(state);
+      
+      if (state?.status === 'playing' && !gameStarted) {
+        storeStartGame();
+      }
+      if (state?.status !== 'playing' && gameStarted) {
+        storeEndGame();
       }
     });
 
-    socket.on('game-started', () => {
+    socket.on('game-started',async () => {
+      await updateGamedata;
       playSound('switch');
+      addNotification('🎮 Game started!');
     });
 
-    socket.on('game-finished', (finalState: any) => {
-      setGameState(finalState);
+    socket.on('game-finished', () => {
       playSound('action');
-    });
-
-    socket.on('player-joined', (data: { playerName: string }) => {
-      playSound('click');
-    });
-
-    socket.on('player-disconnected', (data: { playerName: string }) => {
-      console.log(`${data.playerName} disconnected`);
-    });
-
-    socket.on('error', (error: { message: string }) => {
-      console.error('Game error:', error.message);
-    });
-
-    socket.on('game-closed', (data: { reason: string }) => {
-      console.log('Game closed by server:', data.reason);
-      addNotification(`🚪 Game closed: ${data.reason}`);
-      
-      // Auto-exit to lobby after a short delay
-      setTimeout(() => {
-        clearGameInfo();
-        onExitGame();
-      }, 3000);
+      addNotification('🏁 Game finished!');
     });
 
     return () => {
       socket.off('game-state');
       socket.off('game-started');
       socket.off('game-finished');
-      socket.off('player-joined');
-      socket.off('player-disconnected');
-      socket.off('error');
-      socket.off('game-closed');
     };
-  }, [socket]); // Only depend on socket
-  
-  // Separate effect for requesting game state (only once)
-  useEffect(() => {
-    if (!socket || !contextLoaded || !effectiveGameId || !connected || gameStateRequestedRef.current) {
-      return;
-    }
+  }, [socket, gameStarted, storeStartGame, storeEndGame]);
 
-    console.log('GameInterface: Requesting game state for effectiveGameId:', effectiveGameId);
-    socket.emit('get-game-state', { gameId: effectiveGameId });
-    gameStateRequestedRef.current = true;
-  }, [socket, contextLoaded, effectiveGameId, connected]);
-
-  // Separate effect for basic player and game state updates
+  // Update current player and host status
   useEffect(() => {
-    if (gameState) {
-      const player = gameState.players.find((p: any) => p.id === effectivePlayerId);
-      setCurrentPlayer(player || null);
-      
-      // Fix: Only consider game started when status is 'playing'
-      // currentRound can be > 0 even in waiting room (for game setup)
-      const shouldBeStarted = gameState.status === 'playing';
-      
-      // Debug first to see what's happening
-      console.log('GameInterface: Game state updated:', {
-        playerCount: gameState.players.length,
-        isHost: gameState.host === effectivePlayerId,
-        status: gameState.status,
-        currentRound: gameState.currentRound,
-        shouldBeStarted,
-        currentGameStarted: gameStarted,
-        willCallStartGame: shouldBeStarted && !gameStarted,
-        willCallEndGame: !shouldBeStarted && gameStarted
-      });
-      
-      // CRITICAL FIX: Always call storeStartGame if game should be started, regardless of current state
-      if (shouldBeStarted) {
-        console.log('GameInterface: Game should be started, calling storeStartGame()');
-        storeStartGame();
-        
-        // Check store immediately to confirm update
-        const newGameStarted = useAppStore.getState().gameStarted;
-        console.log('GameInterface: Store gameStarted immediately after storeStartGame():', newGameStarted);
-      } else if (!shouldBeStarted && gameStarted) {
-        console.log('GameInterface: Game should NOT be started, calling storeEndGame()');
-        storeEndGame();
-      }
-    }
-  }, [gameState?.status, gameState?.currentRound, effectivePlayerId]); // Removed gameStarted from dependencies to prevent loops
-  
-  // Clean host detection - simple and reliable
-  useEffect(() => {
-    if (!gameState || !effectivePlayerId) {
-      console.log('GameInterface: Host detection skipped - missing data:', {
-        hasGameState: !!gameState,
-        effectivePlayerId
-      });
-      return;
-    }
+    if (!gameState || !playerId) return;
+    
+    const player = gameState.players?.find((p: any) => p.id === playerId);
+    setCurrentPlayer(player || null);
+    setIsHost(gameState.host === playerId);
+  }, [gameState, playerId]);
 
-    // Enhanced host check: compare player ID with host ID and also check wallet addresses
-    let amHost = false;
-    
-    // Method 1: Direct player ID comparison
-    if (gameState.host === effectivePlayerId) {
-      amHost = true;
-    }
-    
-    // Method 2: Compare wallet addresses (for cases where player ID format differs)
-    if (!amHost && gameState.players) {
-      const currentPlayer = gameState.players.find((p: any) => p.id === effectivePlayerId);
-      const hostPlayer = gameState.players.find((p: any) => p.id === gameState.host);
-      
-      if (currentPlayer?.walletAddress && hostPlayer?.walletAddress) {
-        amHost = currentPlayer.walletAddress.toLowerCase() === hostPlayer.walletAddress.toLowerCase();
-      }
-    }
-    
-    // Method 3: Check if this is marked as creator in localStorage
-    if (!amHost) {
-      try {
-        const storedGameInfo = localStorage.getItem('currentGameInfo');
-        if (storedGameInfo) {
-          const gameInfo = JSON.parse(storedGameInfo);
-          if (gameInfo.isCreator === true && gameInfo.gameId === gameState.gameId) {
-            amHost = true;
-          }
-        }
-      } catch (error) {
-        console.error('Error checking localStorage for creator status:', error);
-      }
-    }
-    
-    console.log('GameInterface: Enhanced host detection check:', {
-      gameStateHost: gameState.host,
-      effectivePlayerId,
-      currentPlayerWallet: gameState.players?.find((p: any) => p.id === effectivePlayerId)?.walletAddress,
-      hostPlayerWallet: gameState.players?.find((p: any) => p.id === gameState.host)?.walletAddress,
-      isCreatorInStorage: (() => {
-        try {
-          const stored = localStorage.getItem('currentGameInfo');
-          return stored ? JSON.parse(stored).isCreator : false;
-        } catch { return false; }
-      })(),
-      amHost,
-      previousIsHost: isHost
-    });
-    
-    setIsHost(amHost);
-    
-    // Additional debugging
-    if (amHost !== isHost) {
-      console.log('GameInterface: Host status changed from', isHost, 'to', amHost);
-    }
-  }, [gameState?.host, effectivePlayerId, gameState?.players]);
-  
-  // Get actionsByRound from game state - combine actionHistory with current round actions
-  const actionsByRound = React.useMemo(() => {
-    if (!gameState) return {};
-    
-    const combined = { ...gameState.actionHistory };
-    
-    // Add current round actions if any exist
-    if (gameState.recentActions && gameState.recentActions.length > 0 && gameState.currentRound) {
-      combined[gameState.currentRound] = gameState.recentActions;
-    }
-    
-    return combined;
-  }, [gameState?.actionHistory, gameState?.recentActions, gameState?.currentRound]);
-  
-  // Player count monitoring disabled for performance optimization
-  // useEffect(() => {
-  //   // Continuous player monitoring disabled to prevent 100% CPU usage
-  // }, [gameState?.players?.length]);
-  
-  // Action monitoring disabled for performance optimization
-  // useEffect(() => {
-  //   // Continuous action monitoring disabled to prevent 100% CPU usage
-  // }, [gameState?.recentActions]);
+  // Handle game action errors
   useEffect(() => {
-    if (gameState) {
-      // Check if game finished
-      if (gameState.status === 'finished' && !gameFinished) {
-        setGameFinished(true);
-        setShowWinnerModal(true);
-        
-        // Play victory sound
-        playSound('switch');
-        
-        addNotification('🏁 Game finished!');
-        
-        // Show winner from game state (calculated by host)
-        if (gameState.winner) {
-          addNotification(`🏆 Winner: ${gameState.winner.name} (${gameState.winner.finalScore} points)!`);
-        }
-      }
-      
-      // Check if game returned to waiting after being finished
-      if (gameState.status === 'waiting' && gameFinished) {
-        setGameFinished(false);
-        setShowWinnerModal(false);
-        addNotification('🔄 Ready for rematch!');
-      }
+    if (gameActionError) {
+      addNotification(`❌ ${gameActionError}`);
     }
-  }, [gameState?.status, gameState?.winner?.name, gameState?.winner?.finalScore, gameFinished]);
-
-  // Timer monitoring disabled for performance optimization
-  // useEffect(() => {
-  //   // Timer monitoring disabled to prevent 100% CPU usage
-  // }, [gameState?.timeRemaining]);
+  }, [gameActionError]);
 
   const addNotification = (message: string) => {
-    setNotifications(prev => [message, ...prev.slice(0, 4)]);
+    setNotifications(prev => [message, ...prev.slice(0, 2)]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n !== message));
-    }, 5000);
+    }, 3000);
   };
 
-  const handleStartGame = () => {
-    if (isHost && socket) {
-      socket.emit('start-game');
-      addNotification('Starting game...');
+  const handleStartGame = async () => {
+     console.log(currentGame?.id);
+     
+    try {
+      
+      
+      addNotification('🚀 Starting game on blockchain...',);
+      
+      // Start game on blockchain first
+      const result = await startGame(currentGame?.id!);
+      
+      if (result.success) {
+        // Then emit to socket for real-time updates
+        socket?.emit('start-game');
+        addNotification('✅ Game started successfully!');
+        playSound('switch');
+      } else {
+        addNotification(`❌ Failed to start game: ${result.error}`);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      addNotification(`❌ Failed to start game: ${errorMessage}`);
     }
   };
 
   const handleExitGame = () => {
-    // Emit exit-game event to server
-    if (socket && effectiveGameId && effectivePlayerId) {
-      socket.emit('exit-game', {
-        gameId: effectiveGameId,
-        playerId: effectivePlayerId
-      });
+    if (socket && gameId && playerId) {
+      socket.emit('exit-game', { gameId, playerId });
     }
     
-    // Clear game info from context
+    // Reset game action state when exiting
+    resetGameState();
     clearGameInfo();
     onExitGame();
   };
 
   const handlePlayerAction = async () => {
-    await handleAction();
-  };
+    
+    console.log("Action call",selectedAction,selectedAsset);
+    if (!selectedAction || !selectedAsset) return;
 
-  const handleAction = async () => {
-    if (!currentPlayer || amount <= 0) return;
-
-    const actionData = {
-      action: selectedAction,
-      resource: selectedResource,
-      amount: amount,
-      targetPlayer: selectedAction === 'sabotage' ? targetPlayer : undefined
-    };
-
-    // Use the store-managed selected resource and action
-    const assetType: AssetType = selectedResource;
-    const actionType: ActionType = selectedAction;
 
     try {
-      // Execute Dojo action based on selected action type
-      switch (actionType) {
-        case 'Buy':
-          if (canBuyAsset) {
-            console.log(`🎮 Executing Dojo buy ${assetType}`);
-            await executeBuyAsset(assetType);
-            addNotification(`📤 Dojo: Buying ${assetType}...`);
-          } else {
-            console.warn('⚠️ Cannot execute buy asset via Dojo');
-          }
-          break;
-        
-        case 'Sell':
-          if (canSellAsset) {
-            console.log(`🎮 Executing Dojo sell ${assetType}`);
-            await executeSellAsset(assetType);
-            addNotification(`📤 Dojo: Selling ${assetType}...`);
-          } else {
-            console.warn('⚠️ Cannot execute sell asset via Dojo');
-          }
-          break;
-        
-        case 'Burn':
-          if (canBurnAsset) {
-            console.log(`🎮 Executing Dojo burn ${assetType}`);
-            await executeBurnAsset(assetType);
-            addNotification(`📤 Dojo: Burning ${assetType}...`);
-          } else {
-            console.warn('⚠️ Cannot execute burn asset via Dojo');
-          }
-          break;
-        
-        case 'Sabotage':
-          if (canSabotage && targetPlayer) {
-            console.log(`🎮 Executing Dojo sabotage ${assetType} on ${targetPlayer}`);
-            // Note: The Dojo sabotage hook expects a player address, but we have player name
-            // We need to find the player's address from the target player name
-            const targetPlayerData = gameState?.players.find((p: any) => p.name === targetPlayer);
-            if (targetPlayerData?.address) {
-              await executeSabotage(targetPlayerData.address, assetType);
-              addNotification(`📤 Dojo: Sabotaging ${targetPlayer}'s ${assetType}...`);
-            } else {
-              console.warn('⚠️ Cannot find target player address for sabotage');
-              addNotification('⚠️ Cannot find target player address for Dojo sabotage');
-            }
-          } else {
-            console.warn('⚠️ Cannot execute sabotage via Dojo');
-          }
-          break;
-        
-        default:
-          console.warn(`⚠️ Unknown action type: ${actionType}`);
+      const result = await executeAction(
+        selectedAction,
+        selectedAsset,
+        selectedAction === 'Sabotage' ? targetPlayer : undefined
+      );
+
+      if (result.success) {
+        addNotification(`✅ ${selectedAction} ${selectedAsset} successful!`);
+      } else {
+        addNotification(`❌ ${selectedAction} failed: ${result.error}`);
       }
     } catch (error) {
-      console.error(`❌ Error executing Dojo action ${selectedAction}:`, error);
-      addNotification(`❌ Dojo transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addNotification(`❌ Action failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    // Also emit to socket system (alongside Dojo)
-    if (socket) {
-      console.log('📡 Emitting socket action:', actionData);
-      socket.emit('player-action', actionData);
-    }
-
-    // Reset form
-    setAmount(1);
+    // Reset target player
     setTargetPlayer('');
   };
 
-  // Handle next round - integrate both Dojo and socket systems
-  const handleNextRound = async () => {
-    if (!dojoGame?.id) {
-      console.warn('⚠️ No Dojo game ID available for next round');
-      return;
-    }
-
-    try {
-      console.log('🎮 Executing Dojo next round...');
-      addNotification('📤 Dojo: Advancing to next round...');
-      
-      const result = await nextRound(dojoGame.id);
-      
-      if (result.success) {
-        addNotification('✅ Dojo: Round advanced successfully!');
-        // Optionally refresh market and player data
-        refetchMarket();
-        refetchPlayer();
-      } else {
-        addNotification(`❌ Dojo next round failed: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('❌ Error executing Dojo next round:', error);
-      addNotification(`❌ Dojo next round error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-
-    // Also emit to socket system (if applicable)
-    if (socket) {
-      console.log('📡 Emitting socket next round...');
-      socket.emit('next-round');
-    }
-  };
-
-  // Show initial loading only for critical missing pieces
-  if (!contextLoaded) {
-    return (
-      <div className="min-h-screen bg-pixel-black scanlines p-6 font-pixel flex items-center justify-center">
-        <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-8">
-          <h2 className="text-pixel-xl font-bold text-pixel-primary text-center mb-4">
-            Initializing...
-          </h2>
-        </div>
-      </div>
-    );
-  }
-
-  // Show connection loading
+  // Loading states
   if (!connected) {
     return (
-      <div className="min-h-screen bg-pixel-black scanlines p-6 font-pixel flex items-center justify-center">
+      <div className="min-h-screen bg-pixel-black flex items-center justify-center">
         <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-8">
-          <h2 className="text-pixel-xl font-bold text-pixel-primary text-center mb-4">
-            Connecting to server...
+          <h2 className="text-pixel-xl font-bold text-pixel-primary text-center">
+            Connecting...
           </h2>
         </div>
       </div>
     );
   }
 
-  // Show error for missing game ID
-  if (!effectiveGameId) {
+  if (!gameId) {
     return (
-      <div className="min-h-screen bg-pixel-black scanlines p-6 font-pixel flex items-center justify-center">
+      <div className="min-h-screen bg-pixel-black flex items-center justify-center">
         <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-8">
           <h2 className="text-pixel-xl font-bold text-pixel-primary text-center mb-4">
-            No game selected...
+            No game selected
           </h2>
-          <div className="mt-6 text-center">
-            <button
-              onClick={handleExitGame}
-              className="px-6 py-3 bg-pixel-gray hover:bg-pixel-light-gray text-pixel-primary font-bold text-pixel-base pixel-btn border-pixel-gray uppercase tracking-wider"
-            >
-              Exit to Lobby
-            </button>
-          </div>
+          <button
+            onClick={handleExitGame}
+            className="px-6 py-3 bg-pixel-gray hover:bg-pixel-light-gray text-pixel-primary font-bold pixel-btn"
+          >
+            Exit to Lobby
+          </button>
         </div>
       </div>
     );
   }
 
-  // If we have gameId but no gameState yet, show retry option
   if (!gameState) {
-    let loadingMessage = 'Loading Game State...';
-    let showRetryButton = true;
-    let showExitButton = true;
-    
-    console.log('GameInterface Loading State:', {
-      contextLoaded,
-      connected,
-      effectiveGameId,
-      gameState: !!gameState,
-      loadingMessage,
-      localStorageGameInfo: localStorage.getItem('currentGameInfo'),
-      contextGameId: gameId,
-      contextPlayerId: playerId,
-      contextPlayerName: playerName
-    });
-    
     return (
-      <div className="min-h-screen bg-pixel-black scanlines p-6 font-pixel flex items-center justify-center">
+      <div className="min-h-screen bg-pixel-black flex items-center justify-center">
         <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-8">
           <h2 className="text-pixel-xl font-bold text-pixel-primary text-center mb-4">
-            {loadingMessage}
+            Loading game...
           </h2>
-          <p className="text-pixel-base-gray text-center">Game ID: {effectiveGameId || 'Unknown'}</p>
-          {showRetryButton && connected && effectiveGameId && (
-            <div className="mt-4 text-center">
-              <button
-                onClick={() => {
-                  console.log('Retrying game state request...');
-                  if (socket && effectiveGameId) {
-                    socket.emit('get-game-state', { gameId: effectiveGameId });
-                  }
-                }}
-                className="px-4 py-2 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider mr-4"
-              >
-                Retry
-              </button>
-            </div>
-          )}
+          <p className="text-pixel-base-gray text-center">Game ID: {gameId}</p>
           <div className="mt-6 text-center">
             <button
               onClick={handleExitGame}
-              className="px-6 py-3 bg-pixel-gray hover:bg-pixel-light-gray text-pixel-primary font-bold text-pixel-base pixel-btn border-pixel-gray uppercase tracking-wider"
+              className="px-6 py-3 bg-pixel-gray hover:bg-pixel-light-gray text-pixel-primary font-bold pixel-btn"
             >
               Exit to Lobby
             </button>
@@ -773,159 +233,102 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
     );
   }
 
-  // Waiting room state
+  // Waiting room
   if (!gameStarted) {
     return (
-      <div className="min-h-screen bg-pixel-black scanlines p-6 font-pixel">
+      <div className="min-h-screen bg-pixel-black p-6">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-pixel-2xl font-bold text-pixel-primary uppercase tracking-wider">
+            <h1 className="text-pixel-2xl font-bold text-pixel-primary">
               Waiting Room
             </h1>
             <button
-              onClick={() => {
-                playSound('click');
-                handleExitGame();
-              }}
-              className="px-4 py-2 bg-pixel-error hover:bg-pixel-warning text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider"
+              onClick={handleExitGame}
+              className="px-4 py-2 bg-pixel-error hover:bg-pixel-warning text-pixel-black font-bold pixel-btn"
             >
               Exit Game
             </button>
           </div>
 
           {/* Game Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-pixel-lg font-bold text-pixel-primary">Game Info</h3>
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-pixel-success pixel-notification border-pixel-success" title="Live Sync Active"></div>
-                  <span className="text-pixel-xs text-pixel-success font-bold">LIVE</span>
-                </div>
-              </div>
-              <div className="space-y-2 text-pixel-base-gray">
-                <p><span className="text-pixel-primary">Game ID:</span> {effectiveGameId}</p>
-                <p><span className="text-pixel-primary">Host:</span> {isHost ? 'You' : gameState.players.find((p: any) => p.id === gameState.host)?.name || 'Unknown'}</p>
-                <p><span className="text-pixel-primary">Players:</span> {gameState.players.length}/4</p>
-                <p><span className="text-pixel-primary">Status:</span> Waiting for players</p>
-              </div>
-            </div>
-
-            <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6">
-              <h3 className="text-pixel-lg font-bold text-pixel-primary mb-4">How to Invite</h3>
-              <div className="space-y-2 text-pixel-base-gray text-pixel-sm">
-                <p>1. Share the Game ID with friends</p>
-                <p>2. They join using "Join by ID"</p>
-                <p>3. Host starts the game when ready</p>
-              </div>
-              <button
-                onClick={() => {
-                  playSound('click');
-                  if (effectiveGameId) {
-                    navigator.clipboard.writeText(effectiveGameId)
-                      .then(() => {
-                        addNotification('📋 Game ID copied to clipboard!');
-                      })
-                      .catch((err) => {
-                        console.error('Failed to copy game ID:', err);
-                        addNotification('❌ Failed to copy Game ID');
-                      });
-                  } else {
-                    addNotification('❌ No Game ID to copy');
-                  }
-                }}
-                className="mt-4 w-full px-4 py-2 bg-pixel-accent hover:bg-pixel-success text-pixel-black font-bold text-pixel-sm pixel-btn border-pixel-black uppercase tracking-wider"
-              >
-                Copy Game ID
-              </button>
+          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6 mb-6">
+            <h3 className="text-pixel-lg font-bold text-pixel-primary mb-4">Game Info</h3>
+            <div className="space-y-2 text-pixel-base-gray">
+              <p><span className="text-pixel-primary">Game ID:</span> {gameId}</p>
+              <p><span className="text-pixel-primary">Host:</span> {isHost ? 'You' : gameState.players?.find((p: any) => p.id === gameState.host)?.name || 'Unknown'}</p>
+              <p><span className="text-pixel-primary">Players:</span> {gameState.players?.length || 0}/4</p>
             </div>
           </div>
 
           {/* Players List */}
           <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6 mb-6">
-            <h3 className="text-pixel-lg font-bold text-pixel-primary mb-4">Players ({gameState.players.length}/4)</h3>
+            <h3 className="text-pixel-lg font-bold text-pixel-primary mb-4">
+              Players ({gameState.players?.length || 0}/4)
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {gameState.players.map((player: any, index: number) => (
+              {gameState.players?.map((player: any) => (
                 <div key={player.id} className="bg-pixel-gray pixel-panel border-pixel-light-gray p-4">
                   <div className="flex items-center justify-between">
                     <span className="text-pixel-primary font-bold">
-                      {player.name} {player.id === effectivePlayerId && '(You)'}
+                      {player.name} {player.id === playerId && '(You)'}
                     </span>
-                    <div className="flex items-center space-x-2">
-                      {player.id === gameState.host && (
-                        <span className="text-pixel-xs bg-pixel-warning text-pixel-black px-2 py-1 pixel-notification border-pixel-black">
-                          HOST
-                        </span>
-                      )}
-                      <div className={`w-3 h-3 pixel-notification border-pixel-black ${
-                        player.connected ? 'bg-pixel-success' : 'bg-pixel-error'
-                      }`} title={player.connected ? 'Connected' : 'Disconnected'} />
-                    </div>
+                    {player.id === gameState.host && (
+                      <span className="text-pixel-xs bg-pixel-warning text-pixel-black px-2 py-1 pixel-notification">
+                        HOST
+                      </span>
+                    )}
                   </div>
-                </div>
-              ))}
-              {Array.from({ length: 4 - gameState.players.length }).map((_, index) => (
-                <div key={`empty-${index}`} className="bg-pixel-black pixel-panel border-pixel-gray p-4">
-                  <span className="text-pixel-base-gray font-bold">Waiting for player...</span>
                 </div>
               ))}
             </div>
           </div>
 
+          {/* Blockchain Action Status */}
+          {/* {gameActionProcessing && (
+            <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-6 mb-6">
+              <h3 className="text-pixel-lg font-bold text-pixel-warning mb-2">
+                Processing on Blockchain...
+              </h3>
+              <div className="space-y-2">
+                <p className="text-pixel-base-gray">
+                  Step: <span className="text-pixel-primary font-bold">{currentStep}</span>
+                </p>
+                <div className="bg-pixel-gray h-2 rounded-full overflow-hidden">
+                  <div className="bg-pixel-primary h-full animate-pulse" style={{ width: '60%' }}></div>
+                </div>
+              </div>
+            </div>
+          )} */}
 
-          {/* Start Game Button - Show ONLY for host */}
+          {/* Start Game Button */}
           {isHost && (
             <div className="text-center">
               <button
-                onClick={() => {
-                  console.log('Start Game button clicked:', {
-                    playerCount: gameState.players.length,
-                    isHost,
-                    hostId: gameState.host,
-                    playerId: effectivePlayerId,
-                    status: gameState.status
-                  });
-                  playSound('click');
-                  handleStartGame();
-                }}
-                disabled={gameState.players.length < 2}
-                className="px-8 py-4 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-lg pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleStartGame}
+                disabled={(gameState.players?.length || 0) < 2 || gameActionProcessing}
+                className="px-8 py-4 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-lg pixel-btn disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {gameState.players.length < 2 ? 'Need 2+ Players' : 'Start Game'}
+                {gameActionProcessing 
+                  ? 'Starting Game...' 
+                  : (gameState.players?.length || 0) < 2 
+                    ? 'Need 2+ Players' 
+                    : 'Start Game'
+                }
               </button>
-              <p className="text-pixel-base-gray text-pixel-xs mt-2">
-                Minimum 2 players required to start
-              </p>
-              <p className="text-pixel-success text-pixel-xs mt-1">
-                You are the host - you can start the game when ready
-              </p>
-            </div>
-          )}
-          
-          {/* Waiting for Host Message */}
-          {!isHost && (
-            <div className="text-center">
-              <div className="bg-pixel-warning pixel-panel border-pixel-black p-4">
-                <p className="text-pixel-black font-bold">Waiting for host to start the game...</p>
-                <p className="text-pixel-black text-pixel-xs mt-1">
-                  Host: {gameState.players.find(p => p.id === gameState.host)?.name || 'Unknown'}
-                </p>
-                <p className="text-pixel-black text-pixel-xs mt-1">
-                  Only the host can start the game
-                </p>
-              </div>
             </div>
           )}
 
-          {/* Notifications */}
-          {notifications.length > 0 && (
-            <div className="fixed top-4 right-4 space-y-2 z-50">
-              {notifications.map((notification, index) => (
-                <div key={index} className="bg-pixel-accent text-pixel-black p-3 pixel-panel border-pixel-black">
-                  <p className="font-bold text-pixel-sm">{notification}</p>
-                </div>
-              ))}
+          {!isHost && (
+            <div className="text-center">
+              <div className="bg-pixel-warning pixel-panel border-pixel-black p-4">
+                <p className="text-pixel-black font-bold">
+                  {gameActionProcessing 
+                    ? 'Host is starting the game...' 
+                    : 'Waiting for host to start the game...'
+                  }
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -933,414 +336,76 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
     );
   }
 
-  // Mobile tab content renderer
-  const renderMobileTabContent = () => {
-    switch (activeTab) {
-      case 'wallet':
-        return (
-          <PlayerWallet 
-            tokens={currentPlayer?.tokens || 0} 
-            assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }} 
-          />
-        );
-      case 'assets':
-        return (
-          <AssetsList 
-            assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }} 
-            marketChanges={gameState.marketChanges} 
-          />
-        );
-      case 'actions':
-        return (
-          <ActionPanel
-            selectedAction={selectedAction}
-            selectedResource={selectedResource}
-            amount={amount}
-            targetPlayer={targetPlayer}
-            players={gameState.players}
-            currentPlayer={currentPlayer || { id: '', name: '', tokens: 0, assets: { gold: 0, water: 0, oil: 0 }, totalAssets: 0 }}
-            onActionChange={(action: ActionType) => {
-              setSelectedActionLocal(action);
-              setSelectedAction(action);
-            }}
-            onResourceChange={(resource: AssetType) => {
-              setSelectedResource(resource);
-              setSelectedAsset(resource);
-            }}
-            onAmountChange={setAmount}
-            onTargetChange={setTargetPlayer}
-            onConfirmAction={handlePlayerAction}
-          />
-        );
-      case 'stats':
-        return <PlayerStats players={gameState.players} />;
-      default:
-        return null;
-    }
-  };
-
+  // Game interface (rest remains the same)
   return (
-    <div className={`min-h-screen-safe scanlines font-pixel ${
-      isLastThreeSeconds 
-        ? 'bg-red-900 bg-opacity-50' 
-        : 'bg-pixel-black'
-    }`}>
-      <div className="w-full mx-auto p-2 sm:p-4">
+    <div className="min-h-screen bg-pixel-black p-4">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-pixel-xs sm:text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
-            <span className="hidden sm:inline">Trading Game</span>
-            <span className="sm:hidden">Game</span>
-          </h1>
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <div className="text-pixel-base-gray text-pixel-xs sm:text-pixel-sm font-bold pixel-notification bg-pixel-dark-gray border-pixel-gray px-2 py-1">
-              R {gameState.currentRound}/{gameState.maxRounds}
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-pixel-xl font-bold text-pixel-primary">Trading Game</h1>
+          <div className="flex items-center space-x-4">
+            <div className="text-pixel-base-gray font-bold bg-pixel-dark-gray border-pixel-gray px-3 py-1 pixel-panel">
+              Round {gameState.currentRound}/{gameState.maxRounds}
             </div>
-            {/* Portrait mode warning for mobile */}
-            {isMobile && !isLandscape && (
-              <div className="text-pixel-xs text-pixel-warning bg-pixel-dark-gray border-pixel-warning px-2 py-1 pixel-notification">
-                📱 Rotate for better view
-              </div>
-            )}
             <button
-              onClick={onExitGame}
-              className="px-2 sm:px-3 py-1 bg-pixel-error hover:bg-pixel-warning text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black uppercase tracking-wider min-h-touch"
+              onClick={handleExitGame}
+              className="px-4 py-2 bg-pixel-error hover:bg-pixel-warning text-pixel-black font-bold pixel-btn"
             >
-              <span className="hidden sm:inline">Exit</span>
-              <span className="sm:hidden">❌</span>
+              Exit
             </button>
           </div>
         </div>
 
-        {/* Timer - Always visible on mobile */}
-        <div className="md:hidden mb-3">
-          <Timer timeRemaining={gameState.timeRemaining} />
-        </div>
-
-        {/* Desktop Layout */}
-        <div className="hidden md:grid md:grid-cols-12 gap-3">
-          {/* Left Column - Compact Info Panels */}
-          <div className="md:col-span-3 space-y-3">
+        {/* Main Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Left Column */}
+          <div className="lg:col-span-3 space-y-4">
             <Timer timeRemaining={gameState.timeRemaining} />
-            <AssetsList assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }} marketChanges={gameState.marketChanges} />
-            <RecentActions 
-              actions={gameState.recentActions} 
-              currentRound={gameState.currentRound} 
-              maxRounds={gameState.maxRounds} 
-              actionsByRound={actionsByRound}
-            />
+            <AssetsList assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }} />
           </div>
 
-          {/* Middle Column - Player Info */}
-          <div className="md:col-span-5 space-y-3">
+          {/* Middle Column */}
+          <div className="lg:col-span-6 space-y-4">
             <PlayerWallet 
               tokens={currentPlayer?.tokens || 0} 
-              assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }} 
+              assets={inventory} 
             />
-            <PlayerStats players={gameState.players} />
+            <PlayerStats players={gameState.players || []} />
           </div>
 
-          {/* Right Column - Actions */}
-          <div className="md:col-span-4 space-y-3">
+          {/* Right Column */}
+          <div className="lg:col-span-3 space-y-4">
             <ActionPanel
-              selectedAction={selectedAction}
-              selectedResource={selectedResource}
-              amount={amount}
+              selectedAction={selectedAction || 'Buy'}
+              selectedResource={selectedAsset || 'Gold'}
+              amount={1}
               targetPlayer={targetPlayer}
-              players={gameState.players}
+              players={gameState.players || []}
               currentPlayer={currentPlayer || { id: '', name: '', tokens: 0, assets: { gold: 0, water: 0, oil: 0 }, totalAssets: 0 }}
-              onActionChange={(action: ActionType) => {
-                setSelectedActionLocal(action);
-                setSelectedAction(action); // Also update Zustand store
-              }}
-              onResourceChange={(resource: AssetType) => {
-                setSelectedResource(resource);
-                setSelectedAsset(resource); // Also update Zustand store
-              }}
-              onAmountChange={setAmount}
+              onActionChange={(action: ActionType) => setSelectedAction(action)}
+              onResourceChange={(resource: AssetType) => setSelectedAsset(resource)}
+              onAmountChange={() => {}} // Fixed amount of 1
               onTargetChange={setTargetPlayer}
               onConfirmAction={handlePlayerAction}
             />
-            
-            {/* Dojo Transaction Status Panel */}
-            {(buyAssetState.isLoading || sellAssetState.isLoading || burnAssetState.isLoading || sabotageState.isLoading || nextRoundProcessing ||
-              buyAssetState.error || sellAssetState.error || burnAssetState.error || sabotageState.error || nextRoundError ||
-              buyAssetState.txStatus === 'SUCCESS' || sellAssetState.txStatus === 'SUCCESS' || burnAssetState.txStatus === 'SUCCESS' || sabotageState.txStatus === 'SUCCESS') && (
-              <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3">
-                <h3 className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider mb-2">Dojo Status</h3>
-                
-                {/* Buy Asset Status */}
-                {(buyAssetState.isLoading || buyAssetState.error || buyAssetState.txStatus) && (
-                  <div className="mb-2 p-2 bg-pixel-gray border-pixel-light-gray pixel-panel">
-                    <div className="text-pixel-xs font-bold text-pixel-primary">Buy Asset</div>
-                    {buyAssetState.isLoading && (
-                      <div className="text-pixel-xs text-pixel-warning">⏳ Processing...</div>
-                    )}
-                    {buyAssetState.error && (
-                      <div className="text-pixel-xs text-pixel-error">❌ {buyAssetState.error}</div>
-                    )}
-                    {buyAssetState.txStatus === 'SUCCESS' && (
-                      <div className="text-pixel-xs text-pixel-success">✅ Transaction successful!</div>
-                    )}
-                    {buyAssetState.txHash && (
-                      <div className="text-pixel-xs text-pixel-base-gray">TX: {buyAssetState.txHash.slice(0, 10)}...</div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Sell Asset Status */}
-                {(sellAssetState.isLoading || sellAssetState.error || sellAssetState.txStatus) && (
-                  <div className="mb-2 p-2 bg-pixel-gray border-pixel-light-gray pixel-panel">
-                    <div className="text-pixel-xs font-bold text-pixel-primary">Sell Asset</div>
-                    {sellAssetState.isLoading && (
-                      <div className="text-pixel-xs text-pixel-warning">⏳ Processing...</div>
-                    )}
-                    {sellAssetState.error && (
-                      <div className="text-pixel-xs text-pixel-error">❌ {sellAssetState.error}</div>
-                    )}
-                    {sellAssetState.txStatus === 'SUCCESS' && (
-                      <div className="text-pixel-xs text-pixel-success">✅ Transaction successful!</div>
-                    )}
-                    {sellAssetState.txHash && (
-                      <div className="text-pixel-xs text-pixel-base-gray">TX: {sellAssetState.txHash.slice(0, 10)}...</div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Burn Asset Status */}
-                {(burnAssetState.isLoading || burnAssetState.error || burnAssetState.txStatus) && (
-                  <div className="mb-2 p-2 bg-pixel-gray border-pixel-light-gray pixel-panel">
-                    <div className="text-pixel-xs font-bold text-pixel-primary">Burn Asset</div>
-                    {burnAssetState.isLoading && (
-                      <div className="text-pixel-xs text-pixel-warning">⏳ Processing...</div>
-                    )}
-                    {burnAssetState.error && (
-                      <div className="text-pixel-xs text-pixel-error">❌ {burnAssetState.error}</div>
-                    )}
-                    {burnAssetState.txStatus === 'SUCCESS' && (
-                      <div className="text-pixel-xs text-pixel-success">✅ Transaction successful!</div>
-                    )}
-                    {burnAssetState.txHash && (
-                      <div className="text-pixel-xs text-pixel-base-gray">TX: {burnAssetState.txHash.slice(0, 10)}...</div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Sabotage Status */}
-                {(sabotageState.isLoading || sabotageState.error || sabotageState.txStatus) && (
-                  <div className="mb-2 p-2 bg-pixel-gray border-pixel-light-gray pixel-panel">
-                    <div className="text-pixel-xs font-bold text-pixel-primary">Sabotage</div>
-                    {sabotageState.isLoading && (
-                      <div className="text-pixel-xs text-pixel-warning">⏳ Processing...</div>
-                    )}
-                    {sabotageState.error && (
-                      <div className="text-pixel-xs text-pixel-error">❌ {sabotageState.error}</div>
-                    )}
-                    {sabotageState.txStatus === 'SUCCESS' && (
-                      <div className="text-pixel-xs text-pixel-success">✅ Transaction successful!</div>
-                    )}
-                    {sabotageState.txHash && (
-                      <div className="text-pixel-xs text-pixel-base-gray">TX: {sabotageState.txHash.slice(0, 10)}...</div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Next Round Status */}
-                {(nextRoundProcessing || nextRoundError) && (
-                  <div className="mb-2 p-2 bg-pixel-gray border-pixel-light-gray pixel-panel">
-                    <div className="text-pixel-xs font-bold text-pixel-primary">Next Round</div>
-                    {nextRoundProcessing && (
-                      <div className="text-pixel-xs text-pixel-warning">⏳ Advancing round...</div>
-                    )}
-                    {nextRoundError && (
-                      <div className="text-pixel-xs text-pixel-error">❌ {nextRoundError}</div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Reset buttons */}
-                <div className="flex space-x-1 mt-2">
-                  {buyAssetState.error && (
-                    <button
-                      onClick={resetBuyAssetState}
-                      className="px-2 py-1 bg-pixel-secondary hover:bg-pixel-warning text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black"
-                    >
-                      Clear Buy
-                    </button>
-                  )}
-                  {sellAssetState.error && (
-                    <button
-                      onClick={resetSellAssetState}
-                      className="px-2 py-1 bg-pixel-secondary hover:bg-pixel-warning text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black"
-                    >
-                      Clear Sell
-                    </button>
-                  )}
-                  {burnAssetState.error && (
-                    <button
-                      onClick={resetBurnAssetState}
-                      className="px-2 py-1 bg-pixel-secondary hover:bg-pixel-warning text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black"
-                    >
-                      Clear Burn
-                    </button>
-                  )}
-                  {sabotageState.error && (
-                    <button
-                      onClick={resetSabotageState}
-                      className="px-2 py-1 bg-pixel-secondary hover:bg-pixel-warning text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black"
-                    >
-                      Clear Sabotage
-                    </button>
-                  )}
-                  {nextRoundError && (
-                    <button
-                      onClick={resetNextRoundState}
-                      className="px-2 py-1 bg-pixel-secondary hover:bg-pixel-warning text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black"
-                    >
-                      Clear Round
-                    </button>
-                  )}
+
+            {/* Processing Status */}
+            {(isProcessing || gameActionProcessing) && (
+              <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-4">
+                <div className="text-pixel-sm font-bold text-pixel-primary mb-2">
+                  {gameActionProcessing ? 'Blockchain Processing...' : 'Processing...'}
                 </div>
-              </div>
-            )}
-            
-            {/* Dojo Player & Game Info Panel */}
-            {(dojoPlayer || dojoGame || dojoMarket) && (
-              <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3">
-                <h3 className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider mb-2">Dojo Data</h3>
-                
-                {dojoPlayer && (
-                  <div className="mb-2 p-2 bg-pixel-gray border-pixel-light-gray pixel-panel">
-                    <div className="text-pixel-xs font-bold text-pixel-primary">Player</div>
-                    <div className="text-pixel-xs text-pixel-base-gray">Balance: {dojoPlayer.token_balance}</div>
-                    <div className="text-pixel-xs text-pixel-base-gray">Address: {dojoPlayer.address.slice(0, 10)}...</div>
-                  </div>
-                )}
-                
-                {dojoGame && (
-                  <div className="mb-2 p-2 bg-pixel-gray border-pixel-light-gray pixel-panel">
-                    <div className="text-pixel-xs font-bold text-pixel-primary">Game</div>
-                    <div className="text-pixel-xs text-pixel-base-gray">ID: {dojoGame.id}</div>
-                    <div className="text-pixel-xs text-pixel-base-gray">Round: {dojoGame.round}/{dojoGame.max_rounds}</div>
-                    <div className="text-pixel-xs text-pixel-base-gray">Active: {dojoGame.is_active ? 'Yes' : 'No'}</div>
-                  </div>
-                )}
-                
-                {dojoMarket && (
-                  <div className="mb-2 p-2 bg-pixel-gray border-pixel-light-gray pixel-panel">
-                    <div className="text-pixel-xs font-bold text-pixel-primary">Market</div>
-                    <div className="text-pixel-xs text-pixel-base-gray">Gold: {dojoMarket.gold_price}</div>
-                    <div className="text-pixel-xs text-pixel-base-gray">Water: {dojoMarket.water_price}</div>
-                    <div className="text-pixel-xs text-pixel-base-gray">Oil: {dojoMarket.oil_price}</div>
-                  </div>
-                )}
-                
-                {/* Data refresh buttons */}
-                <div className="flex space-x-1 mt-2">
-                  <button
-                    onClick={refetchPlayer}
-                    className="px-2 py-1 bg-pixel-accent hover:bg-pixel-success text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black"
-                  >
-                    Refresh Player
-                  </button>
-                  <button
-                    onClick={refetchMarket}
-                    className="px-2 py-1 bg-pixel-accent hover:bg-pixel-success text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black"
-                  >
-                    Refresh Market
-                  </button>
+                <div className="text-pixel-xs text-pixel-warning">
+                  ⏳ {gameActionProcessing ? 'Transaction in progress' : 'Action in progress'}
                 </div>
               </div>
             )}
           </div>
-        </div>
-
-        {/* Mobile Layout */}
-        <div className="md:hidden space-y-3">
-          {/* Mobile Tab Navigation */}
-          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-2">
-            <div className="grid grid-cols-4 gap-1">
-              {[
-                { id: 'wallet', label: 'Wallet', icon: '💰' },
-                { id: 'assets', label: 'Assets', icon: '📦' },
-                { id: 'actions', label: 'Actions', icon: '⚡' },
-                { id: 'stats', label: 'Stats', icon: '📊' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    playSound('click');
-                    setActiveTab(tab.id as typeof activeTab);
-                  }}
-                  className={`px-2 py-2 pixel-btn text-pixel-xs font-bold uppercase tracking-wider flex flex-col items-center space-y-1 min-h-touch ${
-                    activeTab === tab.id
-                      ? 'bg-pixel-primary text-pixel-black border-pixel-primary'
-                      : 'bg-pixel-gray text-pixel-primary border-pixel-light-gray hover:bg-pixel-light-gray'
-                  }`}
-                >
-                  <span className="text-sm">{tab.icon}</span>
-                  <span className="hidden xs:inline">{tab.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Mobile Tab Content */}
-          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3">
-            {renderMobileTabContent()}
-          </div>
-
-          {/* Mobile Recent Actions - Always visible */}
-          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3">
-            <h3 className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider mb-2">
-              Recent Actions
-            </h3>
-            <div className="space-y-1">
-              {gameState.recentActions?.slice(0, 3).map((action: string, index: number) => (
-                <div key={index} className="text-pixel-xs text-pixel-base-gray bg-pixel-gray pixel-panel border-pixel-light-gray p-2">
-                  {action}
-                </div>
-              )) || (
-                <div className="text-pixel-xs text-pixel-base-gray italic">
-                  No recent actions
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Mobile Dojo Status - Collapsible */}
-          {(buyAssetState.isLoading || sellAssetState.isLoading || burnAssetState.isLoading || sabotageState.isLoading || 
-            buyAssetState.error || sellAssetState.error || burnAssetState.error || sabotageState.error ||
-            buyAssetState.txStatus || sellAssetState.txStatus || burnAssetState.txStatus || sabotageState.txStatus) && (
-            <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3">
-              <h3 className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider mb-2">
-                Transaction Status
-              </h3>
-              
-              {/* Compact status display for mobile */}
-              <div className="space-y-2">
-                {buyAssetState.isLoading && <div className="text-pixel-xs text-pixel-warning">⏳ Buying...</div>}
-                {sellAssetState.isLoading && <div className="text-pixel-xs text-pixel-warning">⏳ Selling...</div>}
-                {burnAssetState.isLoading && <div className="text-pixel-xs text-pixel-warning">⏳ Burning...</div>}
-                {sabotageState.isLoading && <div className="text-pixel-xs text-pixel-warning">⏳ Sabotaging...</div>}
-                
-                {buyAssetState.error && <div className="text-pixel-xs text-pixel-error">❌ Buy failed</div>}
-                {sellAssetState.error && <div className="text-pixel-xs text-pixel-error">❌ Sell failed</div>}
-                {burnAssetState.error && <div className="text-pixel-xs text-pixel-error">❌ Burn failed</div>}
-                {sabotageState.error && <div className="text-pixel-xs text-pixel-error">❌ Sabotage failed</div>}
-                
-                {buyAssetState.txStatus === 'SUCCESS' && <div className="text-pixel-xs text-pixel-success">✅ Buy successful</div>}
-                {sellAssetState.txStatus === 'SUCCESS' && <div className="text-pixel-xs text-pixel-success">✅ Sell successful</div>}
-                {burnAssetState.txStatus === 'SUCCESS' && <div className="text-pixel-xs text-pixel-success">✅ Burn successful</div>}
-                {sabotageState.txStatus === 'SUCCESS' && <div className="text-pixel-xs text-pixel-success">✅ Sabotage successful</div>}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Notifications */}
         {notifications.length > 0 && (
-          <div className="fixed top-4 right-4 space-y-2 z-40">
+          <div className="fixed top-4 right-4 space-y-2 z-50">
             {notifications.map((notification, index) => (
               <div key={index} className="bg-pixel-accent text-pixel-black p-3 pixel-panel border-pixel-black">
                 <p className="font-bold text-pixel-sm">{notification}</p>
@@ -1348,64 +413,14 @@ export function GameInterface({ onExitGame }: GameInterfaceProps) {
             ))}
           </div>
         )}
-
-        {/* Winner Modal - Simple Center Popup */}
-        {showWinnerModal && gameState?.status === 'finished' && gameState?.winner && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-90 z-50">
-            <div className="bg-pixel-primary p-12 pixel-panel border-pixel-black max-w-lg w-full mx-4 text-center">
-              {/* Winner Crown */}
-              <div className="text-8xl mb-6">
-                👑
-              </div>
-              
-              {/* Game Finished */}
-              <h2 className="text-pixel-3xl font-bold text-pixel-black mb-4 uppercase tracking-wider">
-                Game Finished!
-              </h2>
-              
-              {/* Winner Announcement */}
-              <div className="bg-pixel-black p-6 pixel-panel border-pixel-black mb-6">
-                <h3 className="text-pixel-2xl font-bold text-pixel-primary mb-2 uppercase tracking-wider">
-                  🏆 Winner
-                </h3>
-                <div className="text-pixel-3xl font-bold text-pixel-success mb-2">
-                  {gameState.winner.name}
-                </div>
-                <div className="text-pixel-lg font-bold text-pixel-base-gray">
-                  Final Score: {gameState.winner.finalScore} Points
-                </div>
-                {gameState.winner.id === effectivePlayerId && (
-                  <div className="text-pixel-lg font-bold text-pixel-warning mt-2">
-                    🎉 Congratulations! 🎉
-                  </div>
-                )}
-              </div>
-              
-              {/* Action Buttons */}
-              <div className="flex space-x-4">
-                <button
-                  onClick={() => {
-                    playSound('click');
-                    setShowWinnerModal(false);
-                  }}
-                  className="flex-1 px-6 py-3 bg-pixel-success hover:bg-pixel-accent text-pixel-black font-bold text-pixel-base pixel-btn border-pixel-black uppercase tracking-wider"
-                >
-                  Continue
-                </button>
-                <button
-                  onClick={() => {
-                    playSound('click');
-                    handleExitGame();
-                  }}
-                  className="flex-1 px-6 py-3 bg-pixel-error hover:bg-pixel-warning text-pixel-black font-bold text-pixel-base pixel-btn border-pixel-black uppercase tracking-wider"
-                >
-                  Exit Game
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
 }
+
+// Export wrapped component with error boundary
+export const GameInterface: React.FC<GameInterfaceProps> = ({ onExitGame }) => (
+  <GameErrorBoundary>
+    <GameInterfaceInner onExitGame={onExitGame} />
+  </GameErrorBoundary>
+);

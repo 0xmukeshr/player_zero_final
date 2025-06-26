@@ -141,6 +141,22 @@ interface AppState {
   
   // Connection state
   isConnected: boolean;
+  
+  // Game Interface state
+  gameState: any; // Socket-based game state
+  currentPlayer: any; // Socket-based current player
+  isHost: boolean;
+  amount: number;
+  targetPlayer: string;
+  notifications: string[];
+  gameFinished: boolean;
+  showWinnerModal: boolean;
+  
+  // Mobile UI state
+  activeTab: 'wallet' | 'assets' | 'actions' | 'stats';
+  showMobileMenu: boolean;
+  isLandscape: boolean;
+  isMobile: boolean;
 }
 
 // Store actions
@@ -193,6 +209,24 @@ interface AppActions {
   // Market utilities
   getPriceChange: (asset: AssetType, previousPrice: BigNumberish) => number;
   getMarketVolatility: () => BigNumberish;
+  
+  // Game Interface actions
+  setGameState: (gameState: any) => void;
+  setCurrentPlayer: (player: any) => void;
+  setIsHost: (isHost: boolean) => void;
+  setAmount: (amount: number) => void;
+  setTargetPlayer: (target: string) => void;
+  addNotification: (message: string) => void;
+  removeNotification: (message: string) => void;
+  clearNotifications: () => void;
+  setGameFinished: (finished: boolean) => void;
+  setShowWinnerModal: (show: boolean) => void;
+  
+  // Mobile UI actions
+  setActiveTab: (tab: 'wallet' | 'assets' | 'actions' | 'stats') => void;
+  setShowMobileMenu: (show: boolean) => void;
+  setIsLandscape: (landscape: boolean) => void;
+  setIsMobile: (mobile: boolean) => void;
 }
 
 // Combine state and actions

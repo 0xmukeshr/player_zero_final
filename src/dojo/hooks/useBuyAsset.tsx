@@ -43,6 +43,7 @@ export const useBuyAsset = (): UseBuyAssetReturn => {
   const canBuyAsset = isConnected && hasPlayer && hasActiveGame && !buyAssetState.isLoading;
 
   const executeBuyAsset = useCallback(async (asset: AssetType) => {
+    console.log("buying 0",asset);
     if (!canBuyAsset || !account || !currentGame) {
       setBuyAssetState(prev => ({
         ...prev,
@@ -56,7 +57,7 @@ export const useBuyAsset = (): UseBuyAssetReturn => {
     // Check if player has enough balance
     const assetPrice = getAssetPrice(asset);
     const playerBalance = player?.token_balance || 0;
-    
+    console.log("buying 1",asset);
     if (Number(playerBalance) < Number(assetPrice)) {
       setBuyAssetState(prev => ({
         ...prev,
@@ -64,7 +65,7 @@ export const useBuyAsset = (): UseBuyAssetReturn => {
       }));
       return;
     }
-
+console.log("buying 2",asset);
     try {
       setBuyAssetState({
         isLoading: true,
@@ -77,7 +78,6 @@ export const useBuyAsset = (): UseBuyAssetReturn => {
 
       // Create asset enum for the transaction
       const assetEnum = new CairoCustomEnum({ 
-        [asset]: asset === 'Gold' ? "" : undefined,
         Gold: asset === 'Gold' ? "" : undefined,
         Water: asset === 'Water' ? "" : undefined,
         Oil: asset === 'Oil' ? "" : undefined,

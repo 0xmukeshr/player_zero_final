@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Circle, TrendingUp, TrendingDown, Zap, Target } from 'lucide-react';
+import { TrendingUp, TrendingDown, Zap, Target } from 'lucide-react';
 import { useAudio } from '../hooks/useAudio';
-import { AssetType, ActionType } from '../zustand/store';
+import { AssetType, ActionType, BigNumberUtils } from '../zustand/store';
 import useAppStore from '../zustand/store';
-import { useMarket } from '../dojo/hooks/fetchMarket';
 
 // Local interfaces for socket-based game data
 interface Player {
@@ -49,6 +48,9 @@ export function ActionPanel({
   const [quickPreset, setQuickPreset] = useState<number | null>(null);
   const { playSound } = useAudio();
   
+  // Get market data from Zustand store
+  const { getAssetPrice, canAffordAsset, getAssetAmount } = useAppStore();
+  
   const actions: { type: ActionType; label: string; color: string; borderColor: string; icon: any; description: string }[] = [
     { type: 'Buy', label: 'Buy', color: 'bg-pixel-success hover:bg-pixel-primary', borderColor: 'border-pixel-success', icon: TrendingUp, description: 'Purchase resources with tokens' },
     { type: 'Sell', label: 'Sell', color: 'bg-pixel-blue hover:bg-pixel-cyan', borderColor: 'border-pixel-blue', icon: TrendingDown, description: 'Convert resources to tokens' },
@@ -56,17 +58,17 @@ export function ActionPanel({
     { type: 'Sabotage', label: 'Sabotage', color: 'bg-pixel-error hover:bg-pixel-warning', borderColor: 'border-pixel-error', icon: Target, description: 'Attack opponent resources' }
   ];
 
-  const resources: { type: AssetType; label: string; price: number; icon: string; color: string; bgColor: string }[] = [
-    { type: 'Gold', label: 'Gold', price: 10, icon: '🪙', color: 'text-pixel-yellow', bgColor: 'bg-pixel-yellow' },
-    { type: 'Water', label: 'Water', price: 15, icon: '💧', color: 'text-pixel-blue', bgColor: 'bg-pixel-blue' },
-    { type: 'Oil', label: 'Oil', price: 25, icon: '🛢️', color: 'text-pixel-magenta', bgColor: 'bg-pixel-magenta' }
+  const resources: { type: AssetType; label: string; icon: string; color: string; bgColor: string }[] = [
+    { type: 'Gold', label: 'Gold', icon: '🪙', color: 'text-pixel-yellow', bgColor: 'bg-pixel-yellow' },
+    { type: 'Water', label: 'Water', icon: '💧', color: 'text-pixel-blue', bgColor: 'bg-pixel-blue' },
+    { type: 'Oil', label: 'Oil', icon: '🛢️', color: 'text-pixel-magenta', bgColor: 'bg-pixel-magenta' }
   ];
 
   const quickAmounts = [1, 5, 10, 25, 50];
 
-  const getResourcePrice = (resource: AssetType) => {
-    const resourceData = resources.find(r => r.type === resource);
-    return resourceData ? resourceData.price : 0;
+  const getResourcePrice = (resource: AssetType): number => {
+    const price = getAssetPrice(resource);
+    return BigNumberUtils.toNumber(price);
   };
 
   // Helper to convert AssetType to lowercase for asset access
@@ -181,7 +183,7 @@ export function ActionPanel({
           <div className="text-pixel-xs text-pixel-base-gray">
             {actions.find(a => a.type === selectedAction)?.description}
           </div>
-          {selectedAction === 'sabotage' && (
+          {selectedAction === 'Sabotage' && (
             <div className="text-pixel-xs text-pixel-warning mt-1">
               Fixed cost: 100 tokens
             </div>
@@ -208,7 +210,7 @@ export function ActionPanel({
             >
               <span className="text-base">{resource.icon}</span>
               <span>{resource.label}</span>
-              <span className="text-pixel-xs opacity-75">${resource.price}</span>
+              <span className="text-pixel-xs opacity-75">{getResourcePrice(resource.type)} T</span>
             </button>
           ))}
         </div>
@@ -224,7 +226,7 @@ export function ActionPanel({
           <div className="flex justify-between items-center text-pixel-xs mt-1">
             <span className="text-pixel-primary font-bold">Market Price:</span>
             <span className="text-pixel-success font-bold">
-              ${getResourcePrice(selectedResource)}/unit
+              {getResourcePrice(selectedResource)} tokens/unit
             </span>
           </div>
         </div>
@@ -319,16 +321,16 @@ export function ActionPanel({
         <div className="mt-2 bg-pixel-dark-gray pixel-panel border-pixel-gray p-2">
           <div className="flex justify-between items-center text-pixel-xs">
             <span className="text-pixel-primary font-bold uppercase">
-              {selectedAction === 'sell' ? 'You receive:' : selectedAction === 'sabotage' ? 'Attack cost:' : 'Total cost:'}
+              {selectedAction === 'Sell' ? 'You receive:' : selectedAction === 'Sabotage' ? 'Attack cost:' : 'Total cost:'}
             </span>
             <span className={`font-bold ${
-              selectedAction === 'sell' ? 'text-pixel-success' : 
-              selectedAction === 'sabotage' ? 'text-pixel-error' : 'text-pixel-warning'
+              selectedAction === 'Sell' ? 'text-pixel-success' : 
+              selectedAction === 'Sabotage' ? 'text-pixel-error' : 'text-pixel-warning'
             }`}>
-              {selectedAction === 'sabotage' ? '100' : calculateCost()} tokens
+              {selectedAction === 'Sabotage' ? '100' : calculateCost()} tokens
             </span>
           </div>
-          {selectedAction === 'buy' && (
+          {selectedAction === 'Buy' && (
             <div className="flex justify-between items-center text-pixel-xs mt-1">
               <span className="text-pixel-primary font-bold">After purchase:</span>
               <span className={`font-bold ${
@@ -342,7 +344,7 @@ export function ActionPanel({
       </div>
 
       {/* Enhanced Target Selection (for Sabotage) */}
-      {selectedAction === 'sabotage' && (
+      {selectedAction === 'Sabotage' && (
         <div>
           <label className="block text-pixel-xs font-bold text-pixel-primary mb-2 uppercase">Select Target</label>
           <div className="grid grid-cols-2 gap-1 mb-2">
@@ -423,10 +425,10 @@ export function ActionPanel({
           <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-2">
             <div className="text-pixel-xs text-pixel-primary font-bold uppercase mb-1">Action Summary</div>
             <div className="text-pixel-xs text-pixel-light-gray">
-              {selectedAction === 'buy' && `Buy ${amount} ${selectedResource} for ${calculateCost()} tokens`}
-              {selectedAction === 'sell' && `Sell ${amount} ${selectedResource} for ${calculateCost()} tokens`}
-              {selectedAction === 'burn' && `Burn ${amount} ${selectedResource} to boost market price`}
-              {selectedAction === 'sabotage' && `Attack ${targetPlayer}'s ${amount} ${selectedResource} for 100 tokens`}
+              {selectedAction === 'Buy' && `Buy ${amount} ${selectedResource} for ${calculateCost()} tokens`}
+              {selectedAction === 'Sell' && `Sell ${amount} ${selectedResource} for ${calculateCost()} tokens`}
+              {selectedAction === 'Burn' && `Burn ${amount} ${selectedResource} to boost market price`}
+              {selectedAction === 'Sabotage' && `Attack ${targetPlayer}'s ${amount} ${selectedResource} for 100 tokens`}
             </div>
           </div>
         )}

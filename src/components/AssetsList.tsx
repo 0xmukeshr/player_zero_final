@@ -1,16 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Circle, TrendingUp, TrendingDown } from 'lucide-react';
-import { AssetType } from '../zustand/store';
+import { AssetType, BigNumberUtils } from '../zustand/store';
 import useAppStore from '../zustand/store';
-import { useMarket } from '../dojo/hooks/fetchMarket';
-import { BigNumberUtils } from '../zustand/store';
-
-// Local interface definition - MarketChange for UI components
-interface MarketChange {
-  resource: 'gold' | 'water' | 'oil';
-  change: number;
-  percentage: string;
-}
 
 interface AssetsListProps {
   assets: {
@@ -18,14 +9,50 @@ interface AssetsListProps {
     water: number;
     oil: number;
   };
-  marketChanges?: MarketChange[];
+  marketChanges?: any; // Keep for backward compatibility but ignore it
 }
 
-export function AssetsList({ assets, marketChanges }: AssetsListProps) {
-  const getMarketTrend = (resourceName: string) => {
-    if (!marketChanges) return null;
-    const resource = resourceName.toLowerCase() as 'gold' | 'water' | 'oil';
-    return marketChanges.find(change => change.resource === resource);
+interface PriceHistory {
+  [key: string]: number;
+}
+
+export function AssetsList({ assets }: AssetsListProps) {
+  const { getAssetPrice } = useAppStore();
+  const [priceHistory, setPriceHistory] = useState<PriceHistory>({});
+  
+  // Track price changes using Dojo market data
+  useEffect(() => {
+    const updatePriceHistory = () => {
+      const newHistory: PriceHistory = {};
+      ['Gold', 'Water', 'Oil'].forEach(asset => {
+        const currentPrice = BigNumberUtils.toNumber(getAssetPrice(asset as AssetType));
+        if (currentPrice > 0) {
+          newHistory[asset] = currentPrice;
+        }
+      });
+      setPriceHistory(prev => ({ ...prev, ...newHistory }));
+    };
+    
+    updatePriceHistory();
+    // Update price history every 5 seconds
+    const interval = setInterval(updatePriceHistory, 5000);
+    return () => clearInterval(interval);
+  }, [getAssetPrice]);
+  
+  const getMarketTrend = (assetName: string) => {
+    const currentPrice = BigNumberUtils.toNumber(getAssetPrice(assetName as AssetType));
+    const previousPrice = priceHistory[assetName];
+    
+    if (!previousPrice || currentPrice === 0) return null;
+    
+    const change = currentPrice - previousPrice;
+    const percentage = ((change / previousPrice) * 100).toFixed(1);
+    
+    return {
+      change,
+      percentage: `${change >= 0 ? '+' : ''}${percentage}%`,
+      direction: change >= 0 ? 'up' : 'down'
+    };
   };
 
   const assetData = [

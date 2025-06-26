@@ -40,12 +40,7 @@ export function useStarknetConnect() {
     }
   }, [disconnect]);
 
-  // Reduced logging frequency
-  if (status === 'connected' && !hasTriedConnect) {
-    console.log("🎮 Starknet Connected:", {
-      address: address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null
-    });
-  }
+   
 
   return { 
     status, 
