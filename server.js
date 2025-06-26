@@ -437,13 +437,14 @@ io.on('connection', (socket) => {
       }
       
       const { marketPrices } = data;
+      console.log(data);
       
       if (marketPrices && typeof marketPrices === 'object') {
         // Update market prices
         game.marketPrices = {
-          gold: marketPrices.gold || game.marketPrices.gold,
-          water: marketPrices.water || game.marketPrices.water,
-          oil: marketPrices.oil || game.marketPrices.oil
+          gold: marketPrices.gold_price || game.marketPrices.gold,
+          water: marketPrices.water_price || game.marketPrices.water,
+          oil: marketPrices.oil_price || game.marketPrices.oil
         };
         
         console.log(`Host ${playerInfo.playerName} updated market prices for game ${playerInfo.gameId}:`, game.marketPrices);

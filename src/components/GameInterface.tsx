@@ -92,15 +92,16 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
         setTimeout(async () => {
           await updateMarketdata();
           addNotification("Market data updated");
+        }, 6500);
 
-          // Send updated market prices to server
+
+        // Send updated market prices to server
           if (market && socket) {
             socket.emit("update-market-prices", {
               gameId,
               marketPrices: market,
             });
           }
-        }, 6500);
       } catch (error) {
         addNotification(`Round advancement failed: ${error}`);
       }
