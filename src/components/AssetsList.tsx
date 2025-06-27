@@ -34,7 +34,7 @@ export function AssetsList({ assets }: AssetsListProps) {
     };
     
     updatePriceHistory();
-    // Update price history every 5 second
+    // Update price history every 5 seconds
     const interval = setInterval(updatePriceHistory, 5000);
     return () => clearInterval(interval);
   }, [getAssetPrice]);
