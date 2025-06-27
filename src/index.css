@@ -167,4 +167,9 @@
   .scanlines {
     /* Scanline effect disabled to improve performance */
   }
+  
+  /* Mobile Touch Target - Ensures buttons are touch-friendly */
+  .min-h-touch {
+    min-height: 44px; /* iOS recommended minimum touch target */
+  }
 }
