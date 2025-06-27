@@ -6,6 +6,7 @@ import { PlayerStats } from "./PlayerStats";
 import { ActionPanel } from "./ActionPanelSimple";
 import { RecentActions } from "./RecentActions";
 import { GameErrorBoundary } from "./GameErrorBoundary";
+import { WinnerPage } from "./WinnerPage";
 import { useSocket } from "../context/SocketContext";
 import { useAudio } from "../hooks/useAudio";
 import { useGame } from "../dojo/hooks/useGame";
@@ -61,6 +62,7 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
   const [notifications, setNotifications] = useState<string[]>([]);
   const [targetPlayer, setTargetPlayer] = useState<string>("");
   const [gameIdCopied, setGameIdCopied] = useState(false);
+  const [gameEnded, setGameEnded] = useState(false);
   
   // Mobile responsive state
   const [activeTab, setActiveTab] = useState<'timer' | 'assets' | 'wallet' | 'stats' | 'actions'>('actions');
@@ -162,15 +164,16 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
           await updateMarketdata();
           addNotification("Market data updated");
 
-        }, 6500);
-
-        // Send updated market prices to server
+          // Send updated market prices to server after fetching
+          // This is crucial for final round pricing
           if (market && socket) {
             socket.emit("update-market-prices", {
               gameId,
               marketPrices: market,
             });
+            console.log('Market prices sent to server:', market);
           }
+        }, 6500);
       } catch (error) {
         addNotification(`Round advancement failed: ${error}`);
       }
@@ -193,21 +196,42 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
       addNotification("Game started!");
     };
 
-    const handleGameFinished = () => {
+    const handleGameEnding = (data?: any) => {
+      console.log('Game ending, waiting for final market prices...');
+      addNotification("Game ended, calculating final scores...");
+      // Don't set gameEnded yet, wait for game-finished
+    };
+
+    const handleGameFinished = (data?: any) => {
       playSound("action");
       addNotification("Game finished!");
+      if (data?.winner) {
+        console.log('Game finished with winner:', data.winner);
+        console.log('Final market prices used:', data.marketPrices);
+        // Update game state with winner and final scores
+        setGameState(prevState => ({
+          ...prevState,
+          status: 'finished',
+          winner: data.winner,
+          finalScores: data.finalScores,
+          marketPrices: data.marketPrices
+        }));
+      }
+      setGameEnded(true);
     };
 
     // Add event listeners
     socket.on("round-ended", handleRoundEnded);
     socket.on("game-state", handleGameState);
     socket.on("game-started", handleGameStarted);
+    socket.on("game-ending", handleGameEnding);
     socket.on("game-finished", handleGameFinished);
 
     return () => {
       socket.off("round-ended", handleRoundEnded);
       socket.off("game-state", handleGameState);
       socket.off("game-started", handleGameStarted);
+      socket.off("game-ending", handleGameEnding);
       socket.off("game-finished", handleGameFinished);
     };
   }, [
@@ -240,6 +264,21 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
       addNotification(`Error: ${gameActionError}`);
     }
   }, [gameActionError]);
+
+  // Add useEffect to detect game end
+  useEffect(() => {
+    if (gameState) {
+      // Check if game has ended through multiple conditions
+      // Note: Only rely on server-side game-finished event or status change
+      const isFinished = gameState.status === 'finished';
+      const hasWinner = gameState.winner !== undefined;
+      
+      if (isFinished || hasWinner) {
+        console.log('Game ended detected:', { isFinished, hasWinner, currentRound: gameState.currentRound, maxRounds: gameState.maxRounds });
+        setGameEnded(true);
+      }
+    }
+  }, [gameState]);
 
   const addNotification = (message: string) => {
     setNotifications((prev) => [message, ...prev.slice(0, 2)]);
@@ -366,6 +405,26 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // Game ended - show winner page
+  if (gameEnded && gameState && gameState.players) {
+    return (
+      <WinnerPage
+        players={gameState.players}
+        marketPrices={gameState.marketPrices || market || { gold: 100, water: 50, oil: 150 }}
+        gameState={gameState}
+        onExitGame={() => {
+          setGameEnded(false);
+          handleExitGame();
+        }}
+        onPlayAgain={() => {
+          // Optional: implement play again functionality
+          setGameEnded(false);
+          // Reset game state or create new game
+        }}
+      />
     );
   }
 
