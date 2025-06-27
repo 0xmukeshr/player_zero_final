@@ -13,7 +13,7 @@ export function Timer({ timeRemaining }: TimerProps) {
   // console.log("running");
   
   return (
-    <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3 max-w-xs">
+    <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-3 w-full max-w-xs md:max-w-none">
       <h3 className="text-pixel-sm font-bold text-pixel-primary mb-2 uppercase tracking-wider text-center">Timer</h3>
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-pixel-gray pixel-card border-pixel-primary p-2 text-center">

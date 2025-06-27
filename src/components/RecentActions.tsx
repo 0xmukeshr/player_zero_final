@@ -92,9 +92,9 @@ export function RecentActions({ actions, currentRound, maxRounds, actionsByRound
           </select>
         </div>
         
-        {/* Actions in original two-row grid layout */}
+        {/* Actions in two-column grid layout for all screen sizes */}
         {displayActions.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {displayActions.slice(0, 6).map((action, index) => {
               // Get stable transaction address
               const transactionAddress = getTransactionAddress(selectedRound, index, action);

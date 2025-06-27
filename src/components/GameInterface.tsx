@@ -61,6 +61,24 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
   const [notifications, setNotifications] = useState<string[]>([]);
   const [targetPlayer, setTargetPlayer] = useState<string>("");
   const [gameIdCopied, setGameIdCopied] = useState(false);
+  
+  // Mobile responsive state
+  const [activeTab, setActiveTab] = useState<'timer' | 'assets' | 'wallet' | 'stats' | 'actions'>('actions');
+  const [isMobile, setIsMobile] = useState(false);
+  const [isTablet, setIsTablet] = useState(false);
+  
+  // Responsive breakpoint detection
+  useEffect(() => {
+    const checkScreenSize = () => {
+      const width = window.innerWidth;
+      setIsMobile(width < 768);
+      setIsTablet(width >= 768 && width < 1024);
+    };
+    
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
 
   // Loading states to prevent multiple updates
   const [isUpdatingGameData, setIsUpdatingGameData] = useState(false);
@@ -541,83 +559,275 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
           </div>
         </div>
 
-        {/* Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Left Column */}
-          <div className="lg:col-span-3 space-y-4">
+        {/* Fixed Timer and Recent Actions for Mobile */}
+        {isMobile && (
+          <div className="space-y-4 mb-4">
             <Timer timeRemaining={gameState.timeRemaining} />
-            <AssetsList
-              assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }}
-              marketChanges={gameState.marketChanges || []}
-              marketPrices={gameState.marketPrices || { gold: 100, water: 50, oil: 150 }}
-              currentRound={gameState.currentRound || 1}
-            />
             <RecentActions
-              actions={gameState.recentActions || []} // Current round actions
+              actions={gameState.recentActions || []}
               currentRound={gameState.currentRound || 1}
               maxRounds={gameState.maxRounds || 10}
               actionsByRound={gameState.actionHistory || {}}
             />
           </div>
+        )}
 
-          {/* Middle Column */}
-          <div className="lg:col-span-6 space-y-4">
-            <PlayerWallet
-              tokens={currentPlayer?.tokens || 0}
-              assets={inventory}
-            />
-            <PlayerStats players={gameState.players || []} />
+        {/* Mobile Navigation */}
+        {isMobile && (
+          <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray mb-4">
+            <div className="flex overflow-x-auto">
+              {[
+                { id: 'assets', label: 'Assets'},
+                { id: 'wallet', label: 'Wallet'},
+                { id: 'stats', label: 'Stats'},
+                { id: 'actions', label: 'Actions'}
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    playSound('click');
+                    setActiveTab(tab.id as typeof activeTab);
+                  }}
+                  className={`flex-1 min-w-0 px-3 py-2 text-pixel-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors ${
+                    activeTab === tab.id
+                      ? 'bg-pixel-gray text-pixel-primary border-b-2 border-pixel-primary'
+                      : 'text-pixel-base-gray hover:text-pixel-primary hover:bg-pixel-gray'
+                  }`}
+                >
+                  <div className="flex flex-col items-center space-y-1">
+                    <span className="text-sm">{tab.icon}</span>
+                    <span>{tab.label}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
+        )}
 
-          {/* Right Column */}
-          <div className="lg:col-span-3 space-y-4">
-            <ActionPanel
-              selectedAction={selectedAction || "Buy"}
-              selectedResource={selectedAsset || "Gold"}
-              amount={1}
-              targetPlayer={targetPlayer}
-              players={gameState.players || []}
-              currentPlayer={
-                currentPlayer || {
-                  id: "",
-                  name: "",
-                  tokens: 0,
-                  assets: { gold: 0, water: 0, oil: 0 },
-                  totalAssets: 0,
-                }
-              }
-              onActionChange={(action: ActionType) => setSelectedAction(action)}
-              onResourceChange={(resource: AssetType) =>
-                setSelectedAsset(resource)
-              }
-              onAmountChange={() => {}} // Fixed amount of 1
-              onTargetChange={setTargetPlayer}
-              onConfirmAction={handlePlayerAction}
-            />
-
-            {/* Processing Status */}
-            {(isProcessing || gameActionProcessing || isUpdatingGameData || isUpdatingMarketData) && (
-              <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-4">
-                <div className="text-pixel-sm font-bold text-pixel-primary mb-2">
-                  {gameActionProcessing
-                    ? "Blockchain Processing..."
-                    : isUpdatingGameData
-                    ? "Updating Game Data..."
-                    : isUpdatingMarketData
-                    ? "Updating Market Data..."
-                    : "Processing..."}
-                </div>
-                <div className="text-pixel-xs text-pixel-warning">
-                  {gameActionProcessing
-                    ? "Transaction in progress"
-                    : isUpdatingGameData || isUpdatingMarketData
-                    ? "Data sync in progress"
-                    : "Action in progress"}
-                </div>
+        {/* Responsive Layout */}
+        {isMobile ? (
+          /* Mobile Layout - Single Column with Tabs */
+          <div className="space-y-4">
+            {activeTab === 'assets' && (
+              <AssetsList
+                assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }}
+                marketChanges={gameState.marketChanges || []}
+                marketPrices={gameState.marketPrices || { gold: 100, water: 50, oil: 150 }}
+                currentRound={gameState.currentRound || 1}
+              />
+            )}
+            {activeTab === 'wallet' && (
+              <PlayerWallet
+                tokens={currentPlayer?.tokens || 0}
+                assets={inventory}
+              />
+            )}
+            {activeTab === 'stats' && (
+              <PlayerStats players={gameState.players || []} />
+            )}
+            {activeTab === 'actions' && (
+              <div className="space-y-4">
+                <ActionPanel
+                  selectedAction={selectedAction || "Buy"}
+                  selectedResource={selectedAsset || "Gold"}
+                  amount={1}
+                  targetPlayer={targetPlayer}
+                  players={gameState.players || []}
+                  currentPlayer={
+                    currentPlayer || {
+                      id: "",
+                      name: "",
+                      tokens: 0,
+                      assets: { gold: 0, water: 0, oil: 0 },
+                      totalAssets: 0,
+                    }
+                  }
+                  onActionChange={(action: ActionType) => setSelectedAction(action)}
+                  onResourceChange={(resource: AssetType) =>
+                    setSelectedAsset(resource)
+                  }
+                  onAmountChange={() => {}}
+                  onTargetChange={setTargetPlayer}
+                  onConfirmAction={handlePlayerAction}
+                />
+                
+                {/* Processing Status */}
+                {(isProcessing || gameActionProcessing || isUpdatingGameData || isUpdatingMarketData) && (
+                  <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-4">
+                    <div className="text-pixel-sm font-bold text-pixel-primary mb-2">
+                      {gameActionProcessing
+                        ? "Blockchain Processing..."
+                        : isUpdatingGameData
+                        ? "Updating Game Data..."
+                        : isUpdatingMarketData
+                        ? "Updating Market Data..."
+                        : "Processing..."}
+                    </div>
+                    <div className="text-pixel-xs text-pixel-warning">
+                      {gameActionProcessing
+                        ? "Transaction in progress"
+                        : isUpdatingGameData || isUpdatingMarketData
+                        ? "Data sync in progress"
+                        : "Action in progress"}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
-        </div>
+        ) : isTablet ? (
+          /* Tablet Layout - Two Column */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Left Column */}
+            <div className="space-y-4">
+              <Timer timeRemaining={gameState.timeRemaining} />
+              <AssetsList
+                assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }}
+                marketChanges={gameState.marketChanges || []}
+                marketPrices={gameState.marketPrices || { gold: 100, water: 50, oil: 150 }}
+                currentRound={gameState.currentRound || 1}
+              />
+              <RecentActions
+                actions={gameState.recentActions || []}
+                currentRound={gameState.currentRound || 1}
+                maxRounds={gameState.maxRounds || 10}
+                actionsByRound={gameState.actionHistory || {}}
+              />
+            </div>
+
+            {/* Right Column */}
+            <div className="space-y-4">
+              <PlayerWallet
+                tokens={currentPlayer?.tokens || 0}
+                assets={inventory}
+              />
+              <PlayerStats players={gameState.players || []} />
+              <ActionPanel
+                selectedAction={selectedAction || "Buy"}
+                selectedResource={selectedAsset || "Gold"}
+                amount={1}
+                targetPlayer={targetPlayer}
+                players={gameState.players || []}
+                currentPlayer={
+                  currentPlayer || {
+                    id: "",
+                    name: "",
+                    tokens: 0,
+                    assets: { gold: 0, water: 0, oil: 0 },
+                    totalAssets: 0,
+                  }
+                }
+                onActionChange={(action: ActionType) => setSelectedAction(action)}
+                onResourceChange={(resource: AssetType) =>
+                  setSelectedAsset(resource)
+                }
+                onAmountChange={() => {}}
+                onTargetChange={setTargetPlayer}
+                onConfirmAction={handlePlayerAction}
+              />
+              
+              {/* Processing Status */}
+              {(isProcessing || gameActionProcessing || isUpdatingGameData || isUpdatingMarketData) && (
+                <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-4">
+                  <div className="text-pixel-sm font-bold text-pixel-primary mb-2">
+                    {gameActionProcessing
+                      ? "Blockchain Processing..."
+                      : isUpdatingGameData
+                      ? "Updating Game Data..."
+                      : isUpdatingMarketData
+                      ? "Updating Market Data..."
+                      : "Processing..."}
+                  </div>
+                  <div className="text-pixel-xs text-pixel-warning">
+                    {gameActionProcessing
+                      ? "Transaction in progress"
+                      : isUpdatingGameData || isUpdatingMarketData
+                      ? "Data sync in progress"
+                      : "Action in progress"}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Desktop Layout - Three Column */
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* Left Column */}
+            <div className="lg:col-span-3 space-y-4">
+              <Timer timeRemaining={gameState.timeRemaining} />
+              <AssetsList
+                assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }}
+                marketChanges={gameState.marketChanges || []}
+                marketPrices={gameState.marketPrices || { gold: 100, water: 50, oil: 150 }}
+                currentRound={gameState.currentRound || 1}
+              />
+              <RecentActions
+                actions={gameState.recentActions || []}
+                currentRound={gameState.currentRound || 1}
+                maxRounds={gameState.maxRounds || 10}
+                actionsByRound={gameState.actionHistory || {}}
+              />
+            </div>
+
+            {/* Middle Column */}
+            <div className="lg:col-span-6 space-y-4">
+              <PlayerWallet
+                tokens={currentPlayer?.tokens || 0}
+                assets={inventory}
+              />
+              <PlayerStats players={gameState.players || []} />
+            </div>
+
+            {/* Right Column */}
+            <div className="lg:col-span-3 space-y-4">
+              <ActionPanel
+                selectedAction={selectedAction || "Buy"}
+                selectedResource={selectedAsset || "Gold"}
+                amount={1}
+                targetPlayer={targetPlayer}
+                players={gameState.players || []}
+                currentPlayer={
+                  currentPlayer || {
+                    id: "",
+                    name: "",
+                    tokens: 0,
+                    assets: { gold: 0, water: 0, oil: 0 },
+                    totalAssets: 0,
+                  }
+                }
+                onActionChange={(action: ActionType) => setSelectedAction(action)}
+                onResourceChange={(resource: AssetType) =>
+                  setSelectedAsset(resource)
+                }
+                onAmountChange={() => {}}
+                onTargetChange={setTargetPlayer}
+                onConfirmAction={handlePlayerAction}
+              />
+
+              {/* Processing Status */}
+              {(isProcessing || gameActionProcessing || isUpdatingGameData || isUpdatingMarketData) && (
+                <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-4">
+                  <div className="text-pixel-sm font-bold text-pixel-primary mb-2">
+                    {gameActionProcessing
+                      ? "Blockchain Processing..."
+                      : isUpdatingGameData
+                      ? "Updating Game Data..."
+                      : isUpdatingMarketData
+                      ? "Updating Market Data..."
+                      : "Processing..."}
+                  </div>
+                  <div className="text-pixel-xs text-pixel-warning">
+                    {gameActionProcessing
+                      ? "Transaction in progress"
+                      : isUpdatingGameData || isUpdatingMarketData
+                      ? "Data sync in progress"
+                      : "Action in progress"}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Notifications */}
         {notifications.length > 0 && (

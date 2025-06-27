@@ -126,11 +126,7 @@ export function Header({ currentPage, onNavigate }: HeaderProps) {
               className="lg:hidden w-8 h-8 sm:w-10 sm:h-10 bg-pixel-gray hover:bg-pixel-light-gray pixel-btn border-pixel-light-gray flex items-center justify-center"
               aria-label="Toggle navigation menu"
             >
-              {mobileMenuOpen ? (
-                <X className="w-4 h-4 sm:w-5 sm:h-5 text-pixel-primary" />
-              ) : (
-                <Menu className="w-4 h-4 sm:w-5 sm:h-5 text-pixel-primary" />
-              )}
+              <Menu className="w-4 h-4 sm:w-5 sm:h-5 text-pixel-primary" />
             </button>
           </div>
         </div>
@@ -153,12 +149,6 @@ export function Header({ currentPage, onNavigate }: HeaderProps) {
                 <h2 className="text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
                   Navigation
                 </h2>
-                <button
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="w-8 h-8 bg-pixel-gray hover:bg-pixel-light-gray pixel-btn border-pixel-light-gray flex items-center justify-center"
-                >
-                  <X className="w-4 h-4 text-pixel-primary" />
-                </button>
               </div>
 
               {/* Menu Items */}

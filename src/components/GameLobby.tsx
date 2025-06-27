@@ -335,85 +335,137 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
                   </div>
                 </div>
               ) : (
-                <div className="bg-pixel-gray pixel-panel border-pixel-light-gray">
-                  {/* Table Header */}
-                  <div className="grid grid-cols-5 gap-4 p-3 bg-pixel-dark-gray border-b-2 border-pixel-light-gray">
-                    <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">
-                      Game Name
-                    </div>
-                    <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">
-                      Status
-                    </div>
-                    <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">
-                      Host
-                    </div>
-                    <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">
-                      Players
-                    </div>
-                    <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider text-center">
-                      Join
-                    </div>
-                  </div>
-
-                  {/* Table Rows */}
-                  {publicGames.map((game, index) => (
-                    <div
-                      key={game.id}
-                      className={`grid grid-cols-5 gap-4 p-3 items-center border-b border-pixel-light-gray hover:bg-pixel-dark-gray transition-colors ${
-                        index % 2 === 0
-                          ? "bg-pixel-gray"
-                          : "bg-pixel-light-gray"
-                      }`}
-                    >
-                      {/* Game Name */}
+                <>
+                  {/* Mobile Card Layout */}
+                  <div className="block sm:hidden space-y-3">
+                    {publicGames.map((game, index) => (
                       <div
-                        className="text-pixel-primary font-bold text-pixel-sm truncate"
-                        title={game.name}
+                        key={game.id}
+                        className="bg-pixel-gray pixel-panel border-pixel-light-gray p-3 space-y-3"
                       >
-                        {game.name}
+                        {/* Top Row - Game Name and Status */}
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-pixel-primary font-bold text-pixel-sm truncate">
+                              {game.name}
+                            </div>
+                            <div className="text-pixel-base-gray text-pixel-xs mt-1">
+                              Host: {game.hostName}
+                            </div>
+                          </div>
+                          <span
+                            className={`text-pixel-xs px-2 py-1 pixel-notification border-pixel-black font-bold uppercase tracking-wider flex-shrink-0 ${
+                              game.status === "Open"
+                                ? "bg-pixel-success text-pixel-black"
+                                : "bg-pixel-warning text-pixel-black"
+                            }`}
+                          >
+                            {game.status}
+                          </span>
+                        </div>
+                        
+                        {/* Bottom Row - Players and Join Button */}
+                        <div className="flex justify-between items-center gap-2">
+                          <div className="text-pixel-base-gray text-pixel-sm font-bold">
+                            Players: {game.currentPlayers}/{game.maxPlayers}
+                          </div>
+                          <button
+                            onClick={() => handleJoinPublicGame(game.id)}
+                            disabled={
+                              joiningGameId === game.id || game.status !== "Open"
+                            }
+                            className="px-3 py-2 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-xs border-2 border-pixel-black uppercase tracking-wide disabled:opacity-50 flex-shrink-0 min-w-[60px]"
+                          >
+                            {joiningGameId === game.id ? "..." : "Join"}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Desktop Table Layout */}
+                  <div className="hidden sm:block">
+                    <div className="bg-pixel-gray pixel-panel border-pixel-light-gray overflow-x-auto">
+                      {/* Table Header */}
+                      <div className="grid grid-cols-5 gap-4 p-3 bg-pixel-dark-gray border-b-2 border-pixel-light-gray min-w-[600px]">
+                        <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">
+                          Game Name
+                        </div>
+                        <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">
+                          Status
+                        </div>
+                        <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">
+                          Host
+                        </div>
+                        <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">
+                          Players
+                        </div>
+                        <div className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider text-center">
+                          Join
+                        </div>
                       </div>
 
-                      {/* Status */}
-                      <div>
-                        <span
-                          className={`text-pixel-xs px-2 py-1 pixel-notification border-pixel-black font-bold uppercase tracking-wider ${
-                            game.status === "Open"
-                              ? "bg-pixel-success text-pixel-black"
-                              : "bg-pixel-warning text-pixel-black"
+                      {/* Table Rows */}
+                      {publicGames.map((game, index) => (
+                        <div
+                          key={game.id}
+                          className={`grid grid-cols-5 gap-4 p-3 items-center border-b border-pixel-light-gray hover:bg-pixel-dark-gray transition-colors min-w-[600px] ${
+                            index % 2 === 0
+                              ? "bg-pixel-gray"
+                              : "bg-pixel-light-gray"
                           }`}
                         >
-                          {game.status}
-                        </span>
-                      </div>
+                          {/* Game Name */}
+                          <div
+                            className="text-pixel-primary font-bold text-pixel-sm truncate"
+                            title={game.name}
+                          >
+                            {game.name}
+                          </div>
 
-                      {/* Host */}
-                      <div
-                        className="text-pixel-base-gray text-pixel-sm truncate"
-                        title={game.hostName}
-                      >
-                        {game.hostName}
-                      </div>
+                          {/* Status */}
+                          <div>
+                            <span
+                              className={`text-pixel-xs px-2 py-1 pixel-notification border-pixel-black font-bold uppercase tracking-wider ${
+                                game.status === "Open"
+                                  ? "bg-pixel-success text-pixel-black"
+                                  : "bg-pixel-warning text-pixel-black"
+                              }`}
+                            >
+                              {game.status}
+                            </span>
+                          </div>
 
-                      {/* Players */}
-                      <div className="text-pixel-base-gray text-pixel-sm font-bold">
-                        {game.currentPlayers}/{game.maxPlayers}
-                      </div>
+                          {/* Host */}
+                          <div
+                            className="text-pixel-base-gray text-pixel-sm truncate"
+                            title={game.hostName}
+                          >
+                            {game.hostName}
+                          </div>
 
-                      {/* Join Button */}
-                      <div className="text-center">
-                        <button
-                          onClick={() => handleJoinPublicGame(game.id)}
-                          disabled={
-                            joiningGameId === game.id || game.status !== "Open"
-                          }
-                          className="px-3 py-1 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50"
-                        >
-                          {joiningGameId === game.id ? "Joining..." : "Join"}
-                        </button>
-                      </div>
+                          {/* Players */}
+                          <div className="text-pixel-base-gray text-pixel-sm font-bold">
+                            {game.currentPlayers}/{game.maxPlayers}
+                          </div>
+
+                          {/* Join Button */}
+                          <div className="text-center">
+                            <button
+                              onClick={() => handleJoinPublicGame(game.id)}
+                              disabled={
+                                joiningGameId === game.id || game.status !== "Open"
+                              }
+                              className="px-3 py-1 bg-pixel-primary hover:bg-pixel-success text-pixel-black font-bold text-pixel-xs pixel-btn border-pixel-black uppercase tracking-wider disabled:opacity-50"
+                            >
+                              {joiningGameId === game.id ? "Joining..." : "Join"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                </>
               )}
 
               {publicGames.length > 0 && (
