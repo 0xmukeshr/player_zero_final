@@ -9,50 +9,81 @@ interface AssetsListProps {
     water: number;
     oil: number;
   };
-  marketChanges?: any; // Keep for backward compatibility but ignore it
+  marketChanges?: Array<{
+    resource: string;
+    change: number;
+    percentage: string;
+  }>;
+  marketPrices?: {
+    gold: number;
+    water: number;
+    oil: number;
+  };
+  currentRound?: number;
 }
 
 interface PriceHistory {
   [key: string]: number;
 }
 
-export function AssetsList({ assets }: AssetsListProps) {
+export function AssetsList({ assets, marketChanges = [], marketPrices, currentRound }: AssetsListProps) {
   const { getAssetPrice } = useAppStore();
-  const [priceHistory, setPriceHistory] = useState<PriceHistory>({});
   
-  // Track price changes using Dojo market data
+  // Track previous round's prices for trend calculation
+  const [previousRoundPrices, setPreviousRoundPrices] = useState<{[key: string]: number}>({});
+  const [lastRound, setLastRound] = useState<number>(0);
+  const [roundTrends, setRoundTrends] = useState<{[key: string]: { change: number; percentage: string; direction: string }}>({});
+  
+  // Original default prices for comparison
+  const ORIGINAL_PRICES = {
+    gold: 100,
+    water: 50,
+    oil: 150
+  };
+  
+  // Update trends only when round changes
   useEffect(() => {
-    const updatePriceHistory = () => {
-      const newHistory: PriceHistory = {};
-      ['Gold', 'Water', 'Oil'].forEach(asset => {
-        const currentPrice = BigNumberUtils.toNumber(getAssetPrice(asset as AssetType));
-        if (currentPrice > 0) {
-          newHistory[asset] = currentPrice;
+    if (currentRound && currentRound !== lastRound && marketPrices) {
+      const newTrends: {[key: string]: { change: number; percentage: string; direction: string }} = {};
+      
+      // Calculate trends based on price changes from previous round
+      Object.keys(ORIGINAL_PRICES).forEach(resource => {
+        const currentPrice = marketPrices[resource as keyof typeof marketPrices];
+        const previousPrice = previousRoundPrices[resource] || ORIGINAL_PRICES[resource as keyof typeof ORIGINAL_PRICES];
+        
+        if (currentPrice && previousPrice) {
+          const change = currentPrice - previousPrice;
+          const percentage = ((change / previousPrice) * 100).toFixed(1);
+          
+          newTrends[resource] = {
+            change,
+            percentage: `${change >= 0 ? '+' : ''}${percentage}%`,
+            direction: change >= 0 ? 'up' : 'down'
+          };
         }
       });
-      setPriceHistory(prev => ({ ...prev, ...newHistory }));
-    };
-    
-    updatePriceHistory();
-    // Update price history every 5 seconds
-    const interval = setInterval(updatePriceHistory, 5000);
-    return () => clearInterval(interval);
-  }, [getAssetPrice]);
+      
+      setRoundTrends(newTrends);
+      setPreviousRoundPrices({ ...marketPrices });
+      setLastRound(currentRound);
+    }
+  }, [currentRound, marketPrices, lastRound, previousRoundPrices]);
+  
+  // Initialize previous prices on first load
+  useEffect(() => {
+    if (marketPrices && Object.keys(previousRoundPrices).length === 0) {
+      setPreviousRoundPrices({ ...marketPrices });
+      if (currentRound) {
+        setLastRound(currentRound);
+      }
+    }
+  }, [marketPrices, previousRoundPrices, currentRound]);
   
   const getMarketTrend = (assetName: string) => {
-    const currentPrice = BigNumberUtils.toNumber(getAssetPrice(assetName as AssetType));
-    const previousPrice = priceHistory[assetName];
+    const resourceName = assetName.toLowerCase();
     
-    if (!previousPrice || currentPrice === 0) return null;
-    
-    const change = currentPrice - previousPrice;
-    const percentage = ((change / previousPrice) * 100).toFixed(1);
-    
-    return {
-      change,
-      percentage: `${change >= 0 ? '+' : ''}${percentage}%`,
-      direction: change >= 0 ? 'up' : 'down'
-    };
+    // Use round-based trends that only update between rounds
+    return roundTrends[resourceName] || null;
   };
 
   const assetData = [

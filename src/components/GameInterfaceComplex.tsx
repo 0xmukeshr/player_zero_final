@@ -878,7 +878,7 @@
 //         {/* Header */}
 //         <div className="flex items-center justify-between mb-2">
 //           <h1 className="text-pixel-xs sm:text-pixel-base font-bold text-pixel-primary uppercase tracking-wider">
-//             <span className="hidden sm:inline">Trading Game</span>
+//             <span className="hidden sm:inline"> Game</span>
 //             <span className="sm:hidden">Game</span>
 //           </h1>
 //           <div className="flex items-center space-x-2 sm:space-x-3">

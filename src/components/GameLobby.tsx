@@ -259,7 +259,7 @@ export function GameLobby({ onPlayGame }: GameLobbyProps) {
                 Create Game
               </h3>
               <p className="text-pixel-base-gray text-pixel-xs mb-4">
-                Start a new multiplayer trading game
+                Start a new multiplayer game
               </p>
               <button
                 onClick={() => setShowCreateModal(true)}

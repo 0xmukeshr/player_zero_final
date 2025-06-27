@@ -4,6 +4,7 @@ import { PlayerWallet } from "./PlayerWallet";
 import { AssetsList } from "./AssetsList";
 import { PlayerStats } from "./PlayerStats";
 import { ActionPanel } from "./ActionPanelSimple";
+import { RecentActions } from "./RecentActions";
 import { GameErrorBoundary } from "./GameErrorBoundary";
 import { useSocket } from "../context/SocketContext";
 import { useAudio } from "../hooks/useAudio";
@@ -525,7 +526,7 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-pixel-xl font-bold text-pixel-primary">
-            Trading Game
+           Game
           </h1>
           <div className="flex items-center space-x-4">
             <div className="text-pixel-base-gray font-bold bg-pixel-dark-gray border-pixel-gray px-3 py-1 pixel-panel">
@@ -547,6 +548,15 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
             <Timer timeRemaining={gameState.timeRemaining} />
             <AssetsList
               assets={currentPlayer?.assets || { gold: 0, water: 0, oil: 0 }}
+              marketChanges={gameState.marketChanges || []}
+              marketPrices={gameState.marketPrices || { gold: 100, water: 50, oil: 150 }}
+              currentRound={gameState.currentRound || 1}
+            />
+            <RecentActions
+              actions={gameState.recentActions || []} // Current round actions
+              currentRound={gameState.currentRound || 1}
+              maxRounds={gameState.maxRounds || 10}
+              actionsByRound={gameState.actionHistory || {}}
             />
           </div>
 

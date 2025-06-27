@@ -40,8 +40,12 @@ export function RecentActions({ actions, currentRound, maxRounds, actionsByRound
     setSelectedRound(currentRound);
   }, [currentRound]);
   
-  // Get actions for the selected round only from actionsByRound
-  const displayActions = actionsByRound[selectedRound] || [];
+  // Get actions for the selected round
+  // If it's the current round, use the live actions prop
+  // Otherwise, use historical actions from actionsByRound
+  const displayActions = selectedRound === currentRound 
+    ? actions // Current round actions (live)
+    : (actionsByRound[selectedRound] || []); // Historical actions
   
   // Generate round options (show ALL rounds from 1 to current round)
   const availableRounds = Array.from({ length: currentRound }, (_, i) => i + 1)
@@ -53,19 +57,19 @@ export function RecentActions({ actions, currentRound, maxRounds, actionsByRound
         <div className="flex items-center space-x-2">
           <h3 className="text-pixel-sm font-bold text-pixel-primary uppercase tracking-wider">Recent Actions</h3>
           <div className="flex items-center space-x-1">
-            <div className="w-1.5 h-1.5 bg-pixel-success pixel-notification border-pixel-success" title="Real-time updates"></div>
-            <span className="text-pixel-xs text-pixel-success font-bold">LIVE</span>
+    
+  
           </div>
         </div>
         <div className="text-pixel-xs text-pixel-base-gray font-bold">
-          Round {currentRound}/{maxRounds}
+          {currentRound}/{maxRounds}
         </div>
       </div>
       
       {/* Round Selector and Actions in horizontal layout */}
       <div className="p-3">
         <div className="flex items-center space-x-3 mb-3">
-          <label className="text-pixel-xs font-bold text-pixel-base-gray uppercase tracking-wider whitespace-nowrap">Round:</label>
+          <label className="text-pixel-xs font-bold text-pixel-base-gray uppercase tracking-wider whitespace-nowrap"></label>
           <select 
             value={selectedRound}
             onChange={(e) => {
@@ -74,11 +78,17 @@ export function RecentActions({ actions, currentRound, maxRounds, actionsByRound
             }}
             className="flex-1 bg-pixel-gray border-2 border-pixel-base-gray text-pixel-xs text-pixel-base-gray font-bold p-1 pixel-card uppercase tracking-wider focus:border-pixel-primary focus:outline-none"
           >
-            {availableRounds.map(round => (
-              <option key={round} value={round} className="bg-pixel-gray">
-                Round {round}{round === currentRound ?'(Current)' : ''} (*{actionsByRound[round]?.length || 0})
-              </option>
-            ))}
+            {availableRounds.map(round => {
+              const actionCount = round === currentRound 
+                ? actions.length 
+                : (actionsByRound[round]?.length || 0);
+              
+              return (
+                <option key={round} value={round} className="bg-pixel-gray">
+                  Round {round}{round === currentRound ? ' (Current)' : ''} ({actionCount})
+                </option>
+              );
+            })}
           </select>
         </div>
         
@@ -90,22 +100,24 @@ export function RecentActions({ actions, currentRound, maxRounds, actionsByRound
               const transactionAddress = getTransactionAddress(selectedRound, index, action);
               
               return (
-                <div key={`${selectedRound}-${index}`} className="pixel-card bg-pixel-gray border-pixel-base-gray p-2 hover:bg-pixel-base-gray transition-colors group">
-                  <div className="text-pixel-xs text-pixel-base-gray group-hover:text-black font-bold leading-tight transition-colors">
-                    {action.length > 45 ? action.substring(0, 42) + '...' : action}
+                <div key={`${selectedRound}-${index}`} className="pixel-card bg-pixel-gray border-pixel-base-gray p-2 hover:bg-pixel-base-gray transition-colors group flex flex-col min-h-[80px]">
+                  <div className="text-pixel-xs text-pixel-base-gray group-hover:text-black font-bold leading-tight transition-colors break-words hyphens-auto flex-1">
+                    {action}
                   </div>
-                  <div className="text-pixel-xs text-pixel-primary mt-1 opacity-75">
-                    #{index + 1}
-                  </div>
-                  <div
-                    className="text-pixel-xs text-pixel-success mt-1 opacity-75 cursor-pointer hover:opacity-100 transition-opacity truncate"
-                    onClick={() => {
-                      navigator.clipboard.writeText(transactionAddress);
-                      playSound('click');
-                    }}
-                    title={`Click to copy: ${transactionAddress}`}
-                  >
-                    📋 {transactionAddress.substring(0, 6)}...{transactionAddress.substring(transactionAddress.length - 4)}
+                  <div className="flex items-center justify-between mt-2 pt-1 border-t border-pixel-base-gray">
+                    <div className="text-pixel-xs text-pixel-primary opacity-75">
+                      #{index + 1}
+                    </div>
+                    <div
+                      className="text-pixel-xs text-pixel-success opacity-75 cursor-pointer hover:opacity-100 transition-opacity truncate max-w-[80px]"
+                      onClick={() => {
+                        navigator.clipboard.writeText(transactionAddress);
+                        playSound('click');
+                      }}
+                      title={`Click to copy: ${transactionAddress}`}
+                    >
+                       {transactionAddress.substring(0, 6)}...{transactionAddress.substring(transactionAddress.length - 4)}
+                    </div>
                   </div>
                 </div>
               );
