@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { AssetType, ActionType } from '../zustand/store';
+import useAppStore from '../zustand/store';
 import { useBuyAsset } from '../dojo/hooks/useBuyAsset';
 import { useSellAsset } from '../dojo/hooks/useSellAsset';
 import { useBurnAsset } from '../dojo/hooks/useBurnAsset';
@@ -23,6 +24,7 @@ interface UseUnifiedActionsReturn {
 
 export const useUnifiedActions = (): UseUnifiedActionsReturn => {
   const { socket } = useSocket();
+  const { markActionPerformed } = useAppStore();
   
   // Dojo hooks
   const { executeBuyAsset, canBuyAsset, buyAssetState } = useBuyAsset();
@@ -161,6 +163,12 @@ export const useUnifiedActions = (): UseUnifiedActionsReturn => {
     }
 
     const success = dojoSuccess; // Primary success is based on Dojo
+    
+    // Mark action as performed if Dojo transaction was successful
+    if (dojoSuccess) {
+      markActionPerformed();
+      console.log('✅ Action marked as performed for this round');
+    }
     
     return {
       success,

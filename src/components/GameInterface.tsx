@@ -47,6 +47,8 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
     setSelectedAction,
     startGame: storeStartGame,
     endGame: storeEndGame,
+    setCurrentRound,
+    hasPerformedActionThisRound,
   } = useAppStore();
   const { nextRound } = useNextRound();
   const { refetch: fetchGameData } = UseGameData();
@@ -257,6 +259,13 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
     setCurrentPlayer(player || null);
     setIsHost(gameState.host === playerId);
   }, [gameState, playerId]);
+
+  // Track round changes and reset action tracking
+  useEffect(() => {
+    if (gameState?.currentRound) {
+      setCurrentRound(gameState.currentRound);
+    }
+  }, [gameState?.currentRound, setCurrentRound]);
 
   // Handle game action errors
   useEffect(() => {

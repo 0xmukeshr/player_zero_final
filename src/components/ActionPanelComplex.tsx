@@ -49,7 +49,7 @@ export function ActionPanel({
   const { playSound } = useAudio();
   
   // Get market data from Zustand store
-  const { getAssetPrice, canAffordAsset, getAssetAmount } = useAppStore();
+  const { getAssetPrice, canAffordAsset, getAssetAmount, hasPerformedActionThisRound } = useAppStore();
   
   const actions: { type: ActionType; label: string; color: string; borderColor: string; icon: any; description: string }[] = [
     { type: 'Buy', label: 'Buy', color: 'bg-pixel-success hover:bg-pixel-primary', borderColor: 'border-pixel-success', icon: TrendingUp, description: 'Purchase resources with tokens' },
@@ -98,6 +98,11 @@ export function ActionPanel({
   };
 
   const canPerformAction = () => {
+    // If player has already performed an action this round, disable the button
+    if (hasPerformedActionThisRound) {
+      return false;
+    }
+
     const cost = calculateCost();
     const assetKey = getAssetKey(selectedResource);
 
@@ -143,6 +148,18 @@ export function ActionPanel({
           {showAdvanced ? 'Simple' : 'Advanced'}
         </button>
       </div>
+      
+      {/* Round Action Status Indicator */}
+      {hasPerformedActionThisRound && (
+        <div className="bg-pixel-warning pixel-panel border-pixel-black p-2 mb-3">
+          <div className="text-pixel-xs font-bold text-pixel-black uppercase text-center">
+            ✅ Action Completed This Round
+          </div>
+          <div className="text-pixel-xs text-pixel-black text-center mt-1">
+            Wait for the next round to perform another action
+          </div>
+        </div>
+      )}
       
       {/* Action Buttons with Icons */}
       <div className="grid grid-cols-2 gap-2">

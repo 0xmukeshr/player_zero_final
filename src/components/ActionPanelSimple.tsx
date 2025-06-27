@@ -1,5 +1,6 @@
 import React from 'react';
 import { AssetType, ActionType } from '../zustand/store';
+import useAppStore from '../zustand/store';
 
 interface Player {
   id: string;
@@ -42,6 +43,9 @@ export function ActionPanel({
   const actions: ActionType[] = ['Buy', 'Sell', 'Burn', 'Sabotage'];
   const resources: AssetType[] = ['Gold', 'Water', 'Oil'];
   
+  // Get round action tracking from Zustand store
+  const { hasPerformedActionThisRound } = useAppStore();
+  
   const resourceEmojis = {
     Gold: '🪙',
     Water: '💧',
@@ -49,7 +53,10 @@ export function ActionPanel({
   };
 
   const canPerformAction = () => {
-     
+    // If player has already performed an action this round, disable the button
+    if (hasPerformedActionThisRound) {
+      return false;
+    }
     
     const assetKey = selectedResource.toLowerCase() as keyof typeof currentPlayer.assets;
     
@@ -69,6 +76,18 @@ export function ActionPanel({
   return (
     <div className="bg-pixel-dark-gray pixel-panel border-pixel-gray p-4 space-y-4">
       <h3 className="text-pixel-sm font-bold text-pixel-primary uppercase">Actions</h3>
+      
+      {/* Round Action Status Indicator */}
+      {hasPerformedActionThisRound && (
+        <div className="bg-pixel-warning pixel-panel border-pixel-black p-2">
+          <div className="text-pixel-xs font-bold text-pixel-black uppercase text-center">
+            Action Completed This Round
+          </div>
+          <div className="text-pixel-xs text-pixel-black text-center mt-1">
+            Wait for the next round to perform another action
+          </div>
+        </div>
+      )}
       
       {/* Action Selection */}
       <div>
@@ -173,12 +192,13 @@ export function ActionPanel({
       {/* Error Message */}
       {!canPerformAction() && (
         <div className="text-pixel-xs text-pixel-error font-bold text-center">
-          {selectedAction === 'Buy' && currentPlayer.tokens < 10 && 'Need more tokens'}
-          {(selectedAction === 'Sell' || selectedAction === 'Burn') && 
+          {hasPerformedActionThisRound && 'One action per round allowed'}
+          {!hasPerformedActionThisRound && selectedAction === 'Buy' && currentPlayer.tokens < 10 && 'Need more tokens'}
+          {!hasPerformedActionThisRound && (selectedAction === 'Sell' || selectedAction === 'Burn') && 
            currentPlayer.assets[selectedResource.toLowerCase() as keyof typeof currentPlayer.assets] === 0 && 
            'No resources to trade'}
-          {selectedAction === 'Sabotage' && !targetPlayer && 'Select a target'}
-          {selectedAction === 'Sabotage' && currentPlayer.tokens < 100 && 'Need 100 tokens'}
+          {!hasPerformedActionThisRound && selectedAction === 'Sabotage' && !targetPlayer && 'Select a target'}
+          {!hasPerformedActionThisRound && selectedAction === 'Sabotage' && currentPlayer.tokens < 100 && 'Need 100 tokens'}
         </div>
       )}
     </div>

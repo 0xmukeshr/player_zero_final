@@ -33,7 +33,8 @@ export const useNextRound = () => {
   const { 
     currentGame, 
     updateGameRound,
-    setLoading 
+    setLoading,
+    setCurrentRound
   } = useAppStore();
 
   // Local state
@@ -139,6 +140,10 @@ export const useNextRound = () => {
         // Update local game state - increment round
         const newRound = Number(currentGame.round) + 1;
         updateGameRound(newRound);
+        
+        // Also update the round tracking in the store (this will reset hasPerformedActionThisRound)
+        setCurrentRound(newRound);
+        console.log(`📊 Round advanced to ${newRound}, action tracking reset`);
 
         setNextRoundState(prev => ({
           ...prev,
@@ -182,7 +187,7 @@ export const useNextRound = () => {
       setIsProcessing(false);
       return { success: false, error: errorMessage };
     }
-  }, [status, account, player, currentGame, isProcessing, client.actions, dojoState, updateGameRound]);
+  }, [status, account, player, currentGame, isProcessing, client.actions, dojoState, updateGameRound, setCurrentRound]);
 
   /**
    * Reset the next round state

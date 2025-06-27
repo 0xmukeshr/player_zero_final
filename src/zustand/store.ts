@@ -197,6 +197,10 @@ interface AppState {
   gameFinished: boolean;
   showWinnerModal: boolean;
   
+  // Round action tracking
+  hasPerformedActionThisRound: boolean;
+  currentRound: number;
+  
   // Mobile UI state
   activeTab: 'wallet' | 'assets' | 'actions' | 'stats';
   showMobileMenu: boolean;
@@ -267,6 +271,11 @@ interface AppActions {
   setGameFinished: (finished: boolean) => void;
   setShowWinnerModal: (show: boolean) => void;
   
+  // Round action tracking actions
+  markActionPerformed: () => void;
+  setCurrentRound: (round: number) => void;
+  resetRoundActions: () => void;
+  
   // Mobile UI actions
   setActiveTab: (tab: 'wallet' | 'assets' | 'actions' | 'stats') => void;
   setShowMobileMenu: (show: boolean) => void;
@@ -312,6 +321,10 @@ const initialState: AppState = {
   notifications: [],
   gameFinished: false,
   showWinnerModal: false,
+  
+  // Round action tracking state
+  hasPerformedActionThisRound: false,
+  currentRound: 1,
   
   // Mobile UI state
   activeTab: 'wallet',
@@ -620,6 +633,22 @@ const useAppStore = create<AppStore>()(
       setIsLandscape: (isLandscape) => set({ isLandscape }),
       
       setIsMobile: (isMobile) => set({ isMobile }),
+      
+      // Round action tracking actions
+      markActionPerformed: () => set({ hasPerformedActionThisRound: true }),
+      
+      setCurrentRound: (round) => set((state) => {
+        // If the round has changed, reset action tracking
+        if (state.currentRound !== round) {
+          return {
+            currentRound: round,
+            hasPerformedActionThisRound: false
+          };
+        }
+        return { currentRound: round };
+      }),
+      
+      resetRoundActions: () => set({ hasPerformedActionThisRound: false }),
     }),
     {
       name: 'playerzero-store',
