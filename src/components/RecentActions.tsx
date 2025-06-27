@@ -43,9 +43,9 @@ export function RecentActions({ actions, currentRound, maxRounds, actionsByRound
   // Get actions for the selected round
   // If it's the current round, use the live actions prop
   // Otherwise, use historical actions from actionsByRound
-  const displayActions = selectedRound === currentRound 
-    ? actions // Current round actions (live)
-    : (actionsByRound[selectedRound] || []); // Historical actions
+const displayActions = selectedRound === currentRound 
+    ? actions
+    : (actionsByRound[selectedRound] || []);
   
   // Generate round options (show ALL rounds from 1 to current round)
   const availableRounds = Array.from({ length: currentRound }, (_, i) => i + 1)
@@ -101,24 +101,41 @@ export function RecentActions({ actions, currentRound, maxRounds, actionsByRound
               
               return (
                 <div key={`${selectedRound}-${index}`} className="pixel-card bg-pixel-gray border-pixel-base-gray p-2 hover:bg-pixel-base-gray transition-colors group flex flex-col min-h-[80px]">
-                  <div className="text-pixel-xs text-pixel-base-gray group-hover:text-black font-bold leading-tight transition-colors break-words hyphens-auto flex-1">
-                    {action}
-                  </div>
-                  <div className="flex items-center justify-between mt-2 pt-1 border-t border-pixel-base-gray">
-                    <div className="text-pixel-xs text-pixel-primary opacity-75">
-                      #{index + 1}
-                    </div>
-                    <div
-                      className="text-pixel-xs text-pixel-success opacity-75 cursor-pointer hover:opacity-100 transition-opacity truncate max-w-[80px]"
-                      onClick={() => {
-                        navigator.clipboard.writeText(transactionAddress);
-                        playSound('click');
-                      }}
-                      title={`Click to copy: ${transactionAddress}`}
-                    >
-                       {transactionAddress.substring(0, 6)}...{transactionAddress.substring(transactionAddress.length - 4)}
-                    </div>
-                  </div>
+                  {(() => {
+                    // Check if action contains transaction hash
+                    const txHashMatch = action.match(/\(TX: (0x[a-fA-F0-9]+)\)/);
+                    const hasRealTxHash = txHashMatch && txHashMatch[1];
+                    const actionTextWithoutTx = hasRealTxHash 
+                      ? action.replace(/\s*\(TX: 0x[a-fA-F0-9]+\)/, '')
+                      : action;
+                    const displayTxHash = hasRealTxHash ? txHashMatch[1] : transactionAddress;
+                    
+                    return (
+                      <>
+                        <div className="text-pixel-xs text-pixel-base-gray group-hover:text-black font-bold leading-tight transition-colors break-words hyphens-auto flex-1">
+                          {actionTextWithoutTx}
+                        </div>
+                        <div className="flex items-center justify-between mt-2 pt-1 border-t border-pixel-base-gray">
+                          <div className="text-pixel-xs text-pixel-primary opacity-75">
+                            #{index + 1}
+                          </div>
+                          <div
+                            className={`text-pixel-xs opacity-75 cursor-pointer hover:opacity-100 transition-opacity truncate max-w-[80px] ${
+                              hasRealTxHash ? 'text-pixel-success' : 'text-pixel-warning'
+                            }`}
+                            onClick={() => {
+                              navigator.clipboard.writeText(displayTxHash);
+                              playSound('click');
+                            }}
+                            title={`${hasRealTxHash ? 'Real transaction hash' : 'Simulated address'} - Click to copy: ${displayTxHash}`}
+                          >
+                            {displayTxHash.substring(0, 6)}...{displayTxHash.substring(displayTxHash.length - 4)}
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()
+                  }
                 </div>
               );
             })}

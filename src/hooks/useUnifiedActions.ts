@@ -59,6 +59,7 @@ export const useUnifiedActions = (): UseUnifiedActionsReturn => {
     let dojoSuccess = false;
     let socketSuccess = false;
     let error: string | undefined;
+    let transactionHash: string | undefined;
 
     console.log(`🎮 Executing unified action: ${actionType} ${assetType}`, { targetPlayer });
 
@@ -68,10 +69,15 @@ export const useUnifiedActions = (): UseUnifiedActionsReturn => {
         case 'Buy':
           console.log("buying 1",canBuyAsset);
           if (canBuyAsset) {
-            
-            await executeBuyAsset(assetType);
-            dojoSuccess = true;
-            console.log(`✅ Dojo ${actionType} executed successfully`);
+            const buyResult = await executeBuyAsset(assetType);
+            if (buyResult?.success) {
+              dojoSuccess = true;
+              console.log(`✅ Dojo ${actionType} executed successfully with tx: ${buyResult.txHash}`);
+              // Store transaction hash for socket emission
+              transactionHash = buyResult.txHash;
+            } else {
+              throw new Error(buyResult?.error || 'Buy action failed');
+            }
           } else {
             throw new Error('Cannot execute buy action via Dojo');
           }
@@ -79,9 +85,14 @@ export const useUnifiedActions = (): UseUnifiedActionsReturn => {
         
         case 'Sell':
           if (canSellAsset) {
-            await executeSellAsset(assetType);
-            dojoSuccess = true;
-            console.log(`✅ Dojo ${actionType} executed successfully`);
+            const sellResult = await executeSellAsset(assetType);
+            if (sellResult?.success) {
+              dojoSuccess = true;
+              console.log(`✅ Dojo ${actionType} executed successfully with tx: ${sellResult.txHash}`);
+              transactionHash = sellResult.txHash;
+            } else {
+              throw new Error(sellResult?.error || 'Sell action failed');
+            }
           } else {
             throw new Error('Cannot execute sell action via Dojo');
           }
@@ -89,9 +100,14 @@ export const useUnifiedActions = (): UseUnifiedActionsReturn => {
         
         case 'Burn':
           if (canBurnAsset) {
-            await executeBurnAsset(assetType);
-            dojoSuccess = true;
-            console.log(`✅ Dojo ${actionType} executed successfully`);
+            const burnResult = await executeBurnAsset(assetType);
+            if (burnResult?.success) {
+              dojoSuccess = true;
+              console.log(`✅ Dojo ${actionType} executed successfully with tx: ${burnResult.txHash}`);
+              transactionHash = burnResult.txHash;
+            } else {
+              throw new Error(burnResult?.error || 'Burn action failed');
+            }
           } else {
             throw new Error('Cannot execute burn action via Dojo');
           }
@@ -99,9 +115,14 @@ export const useUnifiedActions = (): UseUnifiedActionsReturn => {
         
         case 'Sabotage':
           if (canSabotage && targetPlayer) {
-            await executeSabotage(targetPlayer, assetType);
-            dojoSuccess = true;
-            console.log(`✅ Dojo ${actionType} executed successfully`);
+            const sabotageResult = await executeSabotage(targetPlayer, assetType);
+            if (sabotageResult?.success) {
+              dojoSuccess = true;
+              console.log(`✅ Dojo ${actionType} executed successfully with tx: ${sabotageResult.txHash}`);
+              transactionHash = sabotageResult.txHash;
+            } else {
+              throw new Error(sabotageResult?.error || 'Sabotage action failed');
+            }
           } else {
             throw new Error('Cannot execute sabotage action via Dojo');
           }
@@ -123,7 +144,8 @@ export const useUnifiedActions = (): UseUnifiedActionsReturn => {
           action: actionType,
           resource: assetType,
           amount: 1, // Default amount
-          targetPlayer: actionType === 'Sabotage' ? targetPlayer : undefined
+          targetPlayer: actionType === 'Sabotage' ? targetPlayer : undefined,
+          transactionHash: transactionHash // Use actual transaction hash if available
         };
         console.log("actionData",actionData);
         

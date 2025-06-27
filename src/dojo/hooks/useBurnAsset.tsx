@@ -13,7 +13,7 @@ interface BurnAssetActionState {
 
 interface UseBurnAssetReturn {
   burnAssetState: BurnAssetActionState;
-  executeBurnAsset: (asset: AssetType) => Promise<void>;
+  executeBurnAsset: (asset: AssetType) => Promise<{ success: boolean; txHash?: string; error?: string }>;
   canBurnAsset: boolean;
   resetBurnAssetState: () => void;
 }
@@ -45,24 +45,26 @@ export const useBurnAsset = (): UseBurnAssetReturn => {
 
   const executeBurnAsset = useCallback(async (asset: AssetType) => {
     if (!canBurnAsset || !account || !currentGame) {
+      const errorMessage = !account ? "Please connect your controller" : 
+                          !currentGame ? "No active game found" : 
+                          "Cannot burn asset right now";
       setBurnAssetState(prev => ({
         ...prev,
-        error: !account ? "Please connect your controller" : 
-               !currentGame ? "No active game found" : 
-               "Cannot burn asset right now"
+        error: errorMessage
       }));
-      return;
+      return { success: false, error: errorMessage };
     }
 
     // Check if player has the asset to burn
     const assetAmount = getAssetAmount(asset);
     
     if (Number(assetAmount) <= 0) {
+      const errorMessage = `You don't have any ${asset} to burn`;
       setBurnAssetState(prev => ({
         ...prev,
-        error: `You don't have any ${asset} to burn`
+        error: errorMessage
       }));
-      return;
+      return { success: false, error: errorMessage };
     }
 
     try {
@@ -125,6 +127,7 @@ export const useBurnAsset = (): UseBurnAssetReturn => {
           });
         }, 3000);
 
+        return { success: true, txHash: tx.transaction_hash };
       } else {
         throw new Error(`Burn asset transaction failed with code: ${tx?.code || 'unknown'}`);
       }
@@ -148,6 +151,8 @@ export const useBurnAsset = (): UseBurnAssetReturn => {
           txStatus: null
         });
       }, 5000);
+
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }, [
     canBurnAsset, 

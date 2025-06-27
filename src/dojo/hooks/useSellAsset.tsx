@@ -13,7 +13,7 @@ interface SellAssetActionState {
 
 interface UseSellAssetReturn {
   sellAssetState: SellAssetActionState;
-  executeSellAsset: (asset: AssetType) => Promise<void>;
+  executeSellAsset: (asset: AssetType) => Promise<{ success: boolean; txHash?: string; error?: string }>;
   canSellAsset: boolean;
   resetSellAssetState: () => void;
 }
@@ -45,24 +45,26 @@ export const useSellAsset = (): UseSellAssetReturn => {
 
   const executeSellAsset = useCallback(async (asset: AssetType) => {
     if (!canSellAsset || !account || !currentGame) {
+      const errorMessage = !account ? "Please connect your controller" : 
+                          !currentGame ? "No active game found" : 
+                          "Cannot sell asset right now";
       setSellAssetState(prev => ({
         ...prev,
-        error: !account ? "Please connect your controller" : 
-               !currentGame ? "No active game found" : 
-               "Cannot sell asset right now"
+        error: errorMessage
       }));
-      return;
+      return { success: false, error: errorMessage };
     }
 
     // Check if player has the asset to sell
     const assetAmount = getAssetAmount(asset);
     
     if (Number(assetAmount) <= 0) {
+      const errorMessage = `You don't have any ${asset} to sell`;
       setSellAssetState(prev => ({
         ...prev,
-        error: `You don't have any ${asset} to sell`
+        error: errorMessage
       }));
-      return;
+      return { success: false, error: errorMessage };
     }
 
     try {
@@ -124,6 +126,7 @@ export const useSellAsset = (): UseSellAssetReturn => {
           });
         }, 3000);
 
+        return { success: true, txHash: tx.transaction_hash };
       } else {
         throw new Error(`Sell asset transaction failed with code: ${tx?.code || 'unknown'}`);
       }
@@ -147,6 +150,8 @@ export const useSellAsset = (): UseSellAssetReturn => {
           txStatus: null
         });
       }, 5000);
+
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }, [
     canSellAsset, 

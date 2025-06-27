@@ -13,7 +13,7 @@ interface BuyAssetActionState {
 
 interface UseBuyAssetReturn {
   buyAssetState: BuyAssetActionState;
-  executeBuyAsset: (asset: AssetType) => Promise<void>;
+  executeBuyAsset: (asset: AssetType) => Promise<{ success: boolean; txHash?: string; error?: string }>;
   canBuyAsset: boolean;
   resetBuyAssetState: () => void;
 }
@@ -46,13 +46,14 @@ export const useBuyAsset = (): UseBuyAssetReturn => {
   const executeBuyAsset = useCallback(async (asset: AssetType) => {
     console.log("buying 0",asset);
     if (!canBuyAsset || !account || !currentGame) {
+      const errorMessage = !account ? "Please connect your controller" : 
+                          !currentGame ? "No active game found" : 
+                          "Cannot buy asset right now";
       setBuyAssetState(prev => ({
         ...prev,
-        error: !account ? "Please connect your controller" : 
-               !currentGame ? "No active game found" : 
-               "Cannot buy asset right now"
+        error: errorMessage
       }));
-      return;
+      return { success: false, error: errorMessage };
     }
 
     // Check if player has enough balance
@@ -60,11 +61,12 @@ export const useBuyAsset = (): UseBuyAssetReturn => {
     const playerBalance = player?.token_balance || 0;
     console.log("buying 1",asset);
     if (Number(playerBalance) < Number(assetPrice)) {
+      const errorMessage = `Insufficient balance. Need ${assetPrice} tokens`;
       setBuyAssetState(prev => ({
         ...prev,
-        error: `Insufficient balance. Need ${assetPrice} tokens`
+        error: errorMessage
       }));
-      return;
+      return { success: false, error: errorMessage };
     }
 console.log("buying 2",asset);
     try {
@@ -123,6 +125,7 @@ console.log("buying 2",asset);
           });
         }, 3000);
 
+        return { success: true, txHash: tx.transaction_hash };
       } else {
         throw new Error(`Buy asset transaction failed with code: ${tx?.code || 'unknown'}`);
       }
@@ -130,9 +133,10 @@ console.log("buying 2",asset);
     } catch (error) {
       console.error(`❌ Error executing buy ${asset}:`, error);
 
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       setBuyAssetState({
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         txHash: null,
         txStatus: 'REJECTED'
       });
@@ -146,6 +150,8 @@ console.log("buying 2",asset);
           txStatus: null
         });
       }, 5000);
+
+      return { success: false, error: errorMessage };
     }
   }, [
     canBuyAsset, 

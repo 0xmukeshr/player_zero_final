@@ -13,7 +13,7 @@ interface SabotageActionState {
 
 interface UseSabotageReturn {
   sabotageState: SabotageActionState;
-  executeSabotage: (targetPlayer: string, asset: AssetType) => Promise<void>;
+  executeSabotage: (targetPlayer: string, asset: AssetType) => Promise<{ success: boolean; txHash?: string; error?: string }>;
   canSabotage: boolean;
   resetSabotageState: () => void;
 }
@@ -42,31 +42,34 @@ export const useSabotage = (): UseSabotageReturn => {
 
   const executeSabotage = useCallback(async (targetPlayer: string, asset: AssetType) => {
     if (!canSabotage || !account || !currentGame) {
+      const errorMessage = !account ? "Please connect your controller" : 
+                          !currentGame ? "No active game found" : 
+                          "Cannot sabotage right now";
       setSabotageState(prev => ({
         ...prev,
-        error: !account ? "Please connect your controller" : 
-               !currentGame ? "No active game found" : 
-               "Cannot sabotage right now"
+        error: errorMessage
       }));
-      return;
+      return { success: false, error: errorMessage };
     }
 
     // Validate target player
     if (!targetPlayer || targetPlayer.trim() === "") {
+      const errorMessage = "Please select a target player";
       setSabotageState(prev => ({
         ...prev,
-        error: "Please select a target player"
+        error: errorMessage
       }));
-      return;
+      return { success: false, error: errorMessage };
     }
 
     // Check if player is trying to sabotage themselves
     if (targetPlayer === player?.address) {
+      const errorMessage = "You cannot sabotage yourself";
       setSabotageState(prev => ({
         ...prev,
-        error: "You cannot sabotage yourself"
+        error: errorMessage
       }));
-      return;
+      return { success: false, error: errorMessage };
     }
 
     // Optional: Check if player has resources/cost for sabotage
@@ -126,6 +129,7 @@ export const useSabotage = (): UseSabotageReturn => {
           });
         }, 3000);
 
+        return { success: true, txHash: tx.transaction_hash };
       } else {
         throw new Error(`Sabotage transaction failed with code: ${tx?.code || 'unknown'}`);
       }
@@ -149,6 +153,8 @@ export const useSabotage = (): UseSabotageReturn => {
           txStatus: null
         });
       }, 5000);
+
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }, [
     canSabotage, 
