@@ -153,7 +153,7 @@ function GameInterfaceInner({ onExitGame }: GameInterfaceProps) {
         if (isHost) {
           const result = await nextRound(currentGame?.id!);
           if (result.success) {
-            addNotification(`Round ${data.round} started!`);
+            addNotification(`Round ${data.round + 1} started!`);
           } else {
             addNotification(`Failed to advance round: ${result.error}`);
           }
