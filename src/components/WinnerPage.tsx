@@ -550,22 +550,22 @@ export const WinnerPage: React.FC<WinnerPageProps> = ({
                   <div>
                     <h4 className="text-pixel-sm font-bold text-pixel-accent mb-3">Score Formula</h4>
                     <div className="bg-pixel-gray pixel-panel border-pixel-light-gray p-4">
-                      <div className="text-pixel-primary font-bold mb-3 text-center">Final Score =</div>
+                      <div className="text-pixel-primary font-bold mb-3 text-center">Final Score</div>
                       <div className="grid grid-cols-1 gap-2 text-pixel-sm">
                         <div className="flex items-center justify-between px-2 py-1 bg-pixel-black border border-pixel-gray">
-                          <span className="flex items-center"><span className="mr-2">💰</span> Liquid Tokens</span>
+                          <span className="flex items-center text-pixel-base-gray"><span className="mr-2">💰</span> Liquid Tokens</span>
                           <span className="text-pixel-primary">+ Direct Value</span>
                         </div>
                         <div className="flex items-center justify-between px-2 py-1 bg-pixel-black border border-pixel-gray">
-                          <span className="flex items-center"><span className="mr-2">🪙</span> Gold × {marketPrices.gold}</span>
+                          <span className="flex items-center text-pixel-base-gray"><span className="mr-2">🪙</span> Gold × {marketPrices.gold}</span>
                           <span className="text-pixel-primary">+ Asset Value</span>
                         </div>
                         <div className="flex items-center justify-between px-2 py-1 bg-pixel-black border border-pixel-gray">
-                          <span className="flex items-center"><span className="mr-2">💧</span> Water × {marketPrices.water}</span>
+                          <span className="flex items-center text-pixel-base-gray"><span className="mr-2">💧</span> Water × {marketPrices.water}</span>
                           <span className="text-pixel-primary">+ Asset Value</span>
                         </div>
                         <div className="flex items-center justify-between px-2 py-1 bg-pixel-black border border-pixel-gray">
-                          <span className="flex items-center"><span className="mr-2">🛢️</span> Oil × {marketPrices.oil}</span>
+                          <span className="flex items-center text-pixel-base-gray"><span className="mr-2">🛢️</span> Oil × {marketPrices.oil}</span>
                           <span className="text-pixel-primary">+ Asset Value</span>
                         </div>
                       </div>
@@ -599,12 +599,12 @@ export const WinnerPage: React.FC<WinnerPageProps> = ({
                     <div className="grid grid-cols-2 gap-3 mb-4">
                       <div className="bg-pixel-gray pixel-panel border-pixel-light-gray p-3 text-center">
                         <div className="text-pixel-primary font-bold text-pixel-sm">{formatNumber(winner.tokens)}</div>
-                        <div className="text-pixel-xs text-pixel-base-gray">💰 Liquid Tokens</div>
+                        <div className="text-pixel-xs text-pixel-base-gray"> Liquid Tokens</div>
                         <div className="text-pixel-xs text-pixel-accent">{((winner.tokens / winner.finalScore) * 100).toFixed(1)}%</div>
                       </div>
                       <div className="bg-pixel-gray pixel-panel border-pixel-light-gray p-3 text-center">
                         <div className="text-pixel-primary font-bold text-pixel-sm">{formatNumber(winner.assetValue)}</div>
-                        <div className="text-pixel-xs text-pixel-base-gray">📈 Asset Value</div>
+                        <div className="text-pixel-xs text-pixel-base-gray">Asset Value</div>
                         <div className="text-pixel-xs text-pixel-accent">{((winner.assetValue / winner.finalScore) * 100).toFixed(1)}%</div>
                       </div>
                     </div>
